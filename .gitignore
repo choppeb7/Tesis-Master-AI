@@ -1,0 +1,6 @@
+.env
+Datos/
+*.csv
+*.xlsx
+*.xls
+data/*.csv
