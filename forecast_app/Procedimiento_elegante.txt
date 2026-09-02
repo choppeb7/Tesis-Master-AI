@@ -1,0 +1,27 @@
+df original
+→ preparar_datos_inferencia_y_metadata()
+→ df_inferencia
+
+df_inferencia
+→ separar_train_test_df_inferencia()
+→ df_train + df_test
+
+df_train + df_test
+→ generar_df_eval_long()
+→ df_eval_long
+
+df_eval_long
+→ evaluando_metricas_por_articulo_modelo()
+→ df_metricas
+
+df_metricas
+→ mejor_modelo_por_articulo()
+→ df_best_model
+
+df_inferencia + df_best_model
+→ construir_df_forecast_visualizacion()
+→ df_forecast_visual
+
+df original + df_forecast_visual
+→ agregar_forecast_todos_los_articulos()
+→ df_resultado_final
