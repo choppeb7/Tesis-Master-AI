@@ -1,78 +1,31 @@
 # ============================================================
-# Ejecutar pipeline completo de forecast
+# Script principal de pipeline forecast
 # ============================================================
 
+from pipeline.data_loader import cargar_matriz_ventas
+from pipeline.preprocessing import preparar_formato_forecast_y_metadata
+from pipeline.train_test_split import separar_train_test_df_inferencia
+from pipeline.evaluation_dataset import generar_df_eval_long
+from pipeline.metrics import evaluando_metricas_por_articulo_modelo
+from pipeline.model_selection import mejor_modelo_por_articulo
+from pipeline.visualization_data import construir_df_forecast_visualizacion
+from pipeline.export_results import (agregar_forecast_todos_los_articulos, exportar_dataframe_excel)
 from pathlib import Path
 
-from pipeline.main_pipeline import ejecutar_pipeline_forecast
-
-
-def main():
-    print("=" * 80)
-    print("INICIANDO PIPELINE DE FORECAST")
-    print("=" * 80)
-
-    # ------------------------------------------------------------
-    # Definir rutas base
-    # ------------------------------------------------------------
-
-    BASE_DIR = Path(__file__).resolve().parent
-
-    ruta_excel = (
-        BASE_DIR
-        / "data"
-        / "input"
-        / "df_matriz_ventas_articulos_forecast.xlsx"
-    )
-
-    ruta_exportacion = (
-        BASE_DIR
-        / "data"
-        / "output"
-        / "resultado_forecast_compra_sugerida.xlsx"
-    )
-
-    print("\nRuta base:")
-    print(BASE_DIR)
-
-    print("\nRuta archivo entrada:")
-    print(ruta_excel)
-
-    print("\nRuta archivo salida:")
-    print(ruta_exportacion)
-
-    # ------------------------------------------------------------
-    # Validar existencia del archivo de entrada
-    # ------------------------------------------------------------
-
-    if not ruta_excel.exists():
-        raise FileNotFoundError(
-            f"No se encontró el archivo de entrada: {ruta_excel}"
-        )
-
-    print("\nArchivo de entrada encontrado correctamente.")
-
-    # ------------------------------------------------------------
-    # Ejecutar pipeline
-    # ------------------------------------------------------------
-
-    print("\nEjecutando pipeline...")
-    print("Esto puede tardar algunos minutos dependiendo de la cantidad de artículos.")
-
-    resultados = ejecutar_pipeline_forecast(
-        ruta_excel=ruta_excel,
-        meses_evaluacion=6,
-        meses_forecast_futuro=6,
-        ventana_dummy=24,
-        redondeo_evaluacion=None,
-        redondeo_operativo="ceil",
-        ruta_exportacion=ruta_exportacion
-    ):
+def ejecutar_pipeline_forecast(
+    ruta_excel,
+    meses_evaluacion=6,
+    meses_forecast_futuro=6,
+    ventana_dummy=24,
+    redondeo_evaluacion=None,
+    redondeo_operativo="ceil",
+    ruta_exportacion=None
+):
     # ------------------------------------------------------------
     # 1. Cargar dataframe original
     # ------------------------------------------------------------
     ##ruta_excel_matriz = "./Datos/df_matriz_ventas_articulos_forecast.xlsx"
-    df = cargar_matriz_ventas(ruta_excel)
+        df = cargar_matriz_ventas(ruta_excel)
 
         # ------------------------------------------------------------
         # 2. Preparar formato forecast y metadata desde df original
@@ -208,23 +161,24 @@ def main():
             )
 
 
-        # #return {
-        #     "df_original": df,
-        #     "df_inferencia": df_inferencia,
-        #     "df_train": df_train,
-        #     "df_test": df_test,
-        #     "df_eval_long": df_eval_long,
-        #     "df_eval_wide": df_eval_wide,
-        #     "df_metricas": df_metricas,
-        #     "df_best_model": df_best_model,
-        #     "df_metadata_articulos": df_metadata_articulos,
-        #     "metadata_por_articulo": metadata_por_articulo,
-        #     "df_forecast_visual": df_forecast_visual,
-        #     "df_forecast_wide": df_forecast_wide,
-        #     "df_resultado_final": df_resultado_final,
-        #     "columnas_modelos_evaluar": columnas_modelos_evaluar,
-        #     "columnas_forecast": columnas_forecast,
-        #     "mapa_fechas": mapa_fechas,
-        #     "columnas_venta": columnas_venta,
-        #     "info_split": info_visual
-        # }
+        return {
+            "df_original": df,
+            "df_inferencia": df_inferencia,
+            "df_train": df_train,
+            "df_test": df_test,
+            "df_eval_long": df_eval_long,
+            "df_eval_wide": df_eval_wide,
+            "df_metricas": df_metricas,
+            "df_best_model": df_best_model,
+            "df_metadata_articulos": df_metadata_articulos,
+            "metadata_por_articulo": metadata_por_articulo,
+            "df_forecast_visual": df_forecast_visual,
+            "df_forecast_wide": df_forecast_wide,
+            "df_resultado_final": df_resultado_final,
+            "columnas_modelos_evaluar": columnas_modelos_evaluar,
+            "columnas_forecast": columnas_forecast,
+            "mapa_fechas": mapa_fechas,
+            "columnas_venta": columnas_venta,
+            "info_split": info_visual,
+            "ruta_archivo_exportado": ruta_archivo_exportado
+        }

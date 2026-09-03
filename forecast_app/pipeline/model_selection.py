@@ -20,7 +20,7 @@ def mejor_modelo_por_articulo(df_metricas):
     )
 
     df_mejor_modelo = df_mejor_modelo.rename(
-        columns={"modelo": "best_model"}
+        columns={"modelo": "best_model"}.copy()
     )
 
     return df_mejor_modelo
