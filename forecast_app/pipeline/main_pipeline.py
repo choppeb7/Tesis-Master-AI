@@ -19,8 +19,7 @@ def ejecutar_pipeline_forecast(
     ventana_dummy=24,
     redondeo_evaluacion=None,
     redondeo_operativo="ceil",
-    ruta_exportacion=None
-):
+    ruta_exportacion=None):
     # ------------------------------------------------------------
     # 1. Cargar dataframe original
     # ------------------------------------------------------------

@@ -1,9 +1,63 @@
-import pandas as pd
-import streamlit as st
-from forecast_app.pipeline.main_pipeline import ejecutar_pipeline_forecast
-from io import BytesIO
+from pathlib import Path
+import sys
+
 import numpy as np
+import pandas as pd
 import plotly.express as px
+import streamlit as st
+
+
+
+# ============================================================
+# DEFINIR RUTAS DEL PROYECTO
+# ============================================================
+
+# app.py está en:
+# Tesis-Master-AI/streamlit_app/app.py
+
+# PROJECT_ROOT apunta a:
+# Tesis-Master-AI/
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+# FORECAST_APP_DIR apunta a:
+# Tesis-Master-AI/forecast_app/
+FORECAST_APP_DIR = PROJECT_ROOT / "forecast_app"
+
+# Agregar forecast_app al path para poder importar pipeline
+if str(FORECAST_APP_DIR) not in sys.path:
+    sys.path.insert(0, str(FORECAST_APP_DIR))
+
+# ============================================================
+# RUTA DEL EXCEL
+# ============================================================
+from datetime import datetime
+
+fecha_hoy = datetime.today().strftime("%Y-%m-%d")
+
+ruta_excel_default = (
+    FORECAST_APP_DIR
+    / "data"
+    / "input"
+    / "df_matriz_ventas_articulos_forecast.xlsx"
+)
+
+ruta_excel_output_default = (
+    FORECAST_APP_DIR
+    / "data"
+    / "output"
+    / f"df_matriz_ventas_articulos_con_forecast_{fecha_hoy}.xlsx"
+)
+
+
+# ============================================================
+# IMPORTAR PIPELINE
+# ============================================================
+# Ahora Python sí puede encontrar:
+# forecast_app/pipeline/main_pipeline.py
+# ============================================================
+
+from pipeline.main_pipeline import ejecutar_pipeline_forecast
+
 
 # ============================================================
 # CONFIGURACIÓN DE LA APP
@@ -16,7 +70,7 @@ st.set_page_config(
 )
 
 st.title("📊 Prueba local - Modelo AI basado en Statsforecast para reabastecimiento articulos CEROSA")
-st.write("Esta app prueba la conexión con PostgreSQL en Render.")
+#st.write("Esta app prueba la conexión con PostgreSQL en Render.")
 
 
 # ============================================================
@@ -24,12 +78,13 @@ st.write("Esta app prueba la conexión con PostgreSQL en Render.")
 # ============================================================
 
 @st.cache_data(show_spinner=True, show_time=True, ttl=3600)
-def correr_pipeline_cacheado(ruta_excel, meses_evaluacion, meses_forecast_futuro, ventana_dummy):
+def correr_pipeline_cacheado(ruta_excel, meses_evaluacion, meses_forecast_futuro, ventana_dummy, ruta_exportacion):
     return ejecutar_pipeline_forecast(
         ruta_excel=ruta_excel,
         meses_evaluacion=meses_evaluacion,
         meses_forecast_futuro=meses_forecast_futuro,
-        ventana_dummy=ventana_dummy
+        ventana_dummy=ventana_dummy,
+        ruta_exportacion=ruta_exportacion
     )
 
 
@@ -41,6 +96,19 @@ def main():
     # Esto permite guardar los resultados del pipeline después de presionar
     # el botón. Si no lo haces, los resultados podrían perderse en cada rerun.
     # ------------------------------------------------------------
+    if ruta_excel_default is None:
+        st.error("No se encontró el archivo Excel de entrada. Por favor, verifica la ruta.")
+        st.stop()
+    else:
+        st.session_state["ruta_excel_default"] = ruta_excel_default
+        st.success("Archivo Excel de entrada encontrado.")
+
+    if ruta_excel_output_default is None:
+            st.error("No se encontró la ruta de salida del archivo Excel a calcular Por favor, verifica la ruta.")
+            st.stop()
+    else:
+        st.session_state["ruta_excel_output_default"] = ruta_excel_output_default
+        st.success("Archivo Excel de salida encontrado.")
 
     if "resultados_pipeline" not in st.session_state:
         st.session_state["resultados_pipeline"] = None
@@ -51,19 +119,22 @@ def main():
 
     with st.sidebar.form("form_pipeline"):
         st.header("Definir parametros de entrada para el pipeline")
-        meses_evaluacion=st.slider("Meses de evaluación", min_value=1, max_value=12, value=6)
+        #ruta_excel= st.text_input("Ruta archivo Excel", value=str(ruta_excel_default))
+        meses_evaluacion=st.slider("Meses de evaluación", min_value=1, max_value=24, value=6)
         meses_forecast_futuro=st.slider("Cantidad de Meses a predecir", min_value=1, max_value=12, value=6)
         ventana_dummy=st.slider("Intervalo de entrenamiento modelo dummy", min_value=1, max_value=24, value=12)
 
         ejecutar=st.form_submit_button("Ejecutar pipeline forecast")
 
         if ejecutar:
-            ruta_excel="./Datos/df_matriz_ventas_articulos_forecast.xlsx"
+            #ruta_excel="./Datos/df_matriz_ventas_articulos_forecast.xlsx"
+            st.write(f"Ejecutando pipeline con los siguientes parámetros:\n- Ruta Excel: {st.session_state['ruta_excel_default']}\n- Meses evaluación: {meses_evaluacion}\n- Meses forecast futuro: {meses_forecast_futuro}\n- Ventana dummy: {ventana_dummy}")
             resultados_pipeline = correr_pipeline_cacheado(
-                ruta_excel=ruta_excel,
+                ruta_excel=st.session_state["ruta_excel_default"],
                 meses_evaluacion=meses_evaluacion,
                 meses_forecast_futuro=meses_forecast_futuro,
-                ventana_dummy=ventana_dummy
+                ventana_dummy=ventana_dummy,
+                ruta_exportacion=st.session_state["ruta_excel_output_default"]
             )
             st.session_state["resultados_pipeline"] = resultados_pipeline
             st.session_state["pipeline_ejecutado"] = True
@@ -101,10 +172,14 @@ def main():
     # TAB 1: RESUMEN DISTRIBUCIÓN MODELOS GANADORES
     # ============================================================
     with tab1: 
+        st.header("Resumen Resultados del pipeline forecast")
+        df_resultado_kpi = resultados_pipeline["df_resultado_final"].copy()
+        df_resultado_kpi=df_resultado_kpi.rename(columns={"codigo_articulo":"unique_id"})
+        df_best_model_kpi = resultados_pipeline["df_best_model"].copy()
+        st.dataframe(df_resultado_kpi, use_container_width=True, hide_index=True)
+        st.dataframe(df_best_model_kpi, use_container_width=True, hide_index=True)
 
         st.subheader("Resumen distribución modelos ganadores")
-        df_resultado_kpi = resultados_pipeline["df_resultado_final"].copy()
-        df_best_model_kpi = resultados_pipeline["df_best_model"].copy()
 
         #------------------------------------------------------------
         #KPI 1: artículos analizados
@@ -128,7 +203,7 @@ def main():
         # KPI 4: WAPE mediano
         # ------------------------------------------------------------
 
-        wape_limpio = (df_best_model_kpi["WAPE_ranking"].replace([np.inf, -np.inf], np.nan))
+        wape_limpio = (df_best_model_kpi["WAPE_ranking"].notna())
         wape_mediano = wape_limpio.median()
 
         # ------------------------------------------------------------
@@ -142,7 +217,7 @@ def main():
 
         articulos_revision_manual = df_best_model_kpi[
             df_best_model_kpi["WAPE_ranking"].isna()
-            | np.isinf(df_best_model_kpi["WAPE_ranking"])
+            #| np.isinf(df_best_model_kpi["WAPE_ranking"])
             | (df_best_model_kpi["WAPE_ranking"] > 150)
         ]["unique_id"].nunique()
         total_articulos_modelados = df_best_model_kpi["unique_id"].nunique()
@@ -209,8 +284,8 @@ def main():
             fig_pie=px.pie(
                 conteo_modelos,
                 names="Modelo",
-                values="Porcentaje",
-                use_container_width=True
+                values="Porcentaje"
+                #use_container_width=True
             )
             st.plotly_chart(fig_pie, use_container_width=True)
 
@@ -221,13 +296,40 @@ def main():
         # Esto permite probar la app sin que falle por secciones incompletas.
         # ============================================================
     with tab2:
-        st.info("Pendiente: Top 10 artículos con menor error de predicción.")
+        st.info("Pendiente: Top 10 artículos, menor error de predicción.")
+        df_top_10_menor_error = (
+            df_best_model_kpi
+            .sort_values(by=["WAPE_ranking", "bias_total_abs_periodo_evaluacion", "RMSE", "MAE"], ascending=[True, True, True, True])
+            .head(10)
+        )
+        st.dataframe(df_top_10_menor_error, use_container_width=True, hide_index=True)
 
     with tab3:
         st.info("Pendiente: Top 10 artículos con mayor error de predicción.")
+        df_worst_10_mayor_error = (
+            df_best_model_kpi
+            .sort_values(by=["WAPE_ranking", "bias_total_abs_periodo_evaluacion", "RMSE", "MAE"], ascending=[True, True, True, True])
+            .tail(10)
+            .sort_values(by=["WAPE_ranking", "bias_total_abs_periodo_evaluacion", "RMSE", "MAE"], ascending=[False, False, False, False])
+        )
+        st.dataframe(df_worst_10_mayor_error, use_container_width=True, hide_index=True)
 
     with tab4:
         st.info("Pendiente: distribución de WAPE_ranking.")
+        df_distribucion_wape = df_best_model_kpi[["unique_id", "WAPE_ranking"]].copy()
+        df_distribucion_wape["WAPE_ranking"] = pd.to_numeric(df_distribucion_wape["WAPE_ranking"], errors="coerce")##Transformar a nan
+        df_distribucion_wape["WAPE_ranking"] = df_distribucion_wape["WAPE_ranking"].replace([np.inf, -np.inf], np.nan)
+        cantidad_articulos_WAPE_infinito = df_distribucion_wape["WAPE_ranking"].isin([np.inf, -np.inf]).sum()
+        porcentaje_articulos_WAPE_infinito = (cantidad_articulos_WAPE_infinito / len(df_distribucion_wape) * 100)
+        st.write(f"Cantidad de artículos con WAPE_ranking infinito: {cantidad_articulos_WAPE_infinito} que representa el {porcentaje_articulos_WAPE_infinito:.2f}% del total de artículos.")
+        df_distribucion_wape_limpio = df_distribucion_wape.dropna(subset=["WAPE_ranking"]).copy()
+
+
+        st.write(f"Cantidad de artículos con WAPE_ranking limpio: {len(df_distribucion_wape_limpio)}")
+        st.write(f"datatype  {df_distribucion_wape_limpio['WAPE_ranking'].dtype}")
+        st.dataframe(df_distribucion_wape_limpio, use_container_width=True, hide_index=True)
+        #df_distribucion_wape = pd.DataFrame(df_distribucion_wape_limpio, columns=["unique_id", "WAPE_ranking"])
+        #st.area_chart(df_distribucion_wape)
 
     with tab5:
         st.info("Pendiente: distribución de sesgo por modelo ganador.")
