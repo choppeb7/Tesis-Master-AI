@@ -318,18 +318,185 @@ def main():
         st.info("Pendiente: distribución de WAPE_ranking.")
         df_distribucion_wape = df_best_model_kpi[["unique_id", "WAPE_ranking"]].copy()
         df_distribucion_wape["WAPE_ranking"] = pd.to_numeric(df_distribucion_wape["WAPE_ranking"], errors="coerce")##Transformar a nan
-        df_distribucion_wape["WAPE_ranking"] = df_distribucion_wape["WAPE_ranking"].replace([np.inf, -np.inf], np.nan)
         cantidad_articulos_WAPE_infinito = df_distribucion_wape["WAPE_ranking"].isin([np.inf, -np.inf]).sum()
         porcentaje_articulos_WAPE_infinito = (cantidad_articulos_WAPE_infinito / len(df_distribucion_wape) * 100)
         st.write(f"Cantidad de artículos con WAPE_ranking infinito: {cantidad_articulos_WAPE_infinito} que representa el {porcentaje_articulos_WAPE_infinito:.2f}% del total de artículos.")
+
+        articulos_total = df_distribucion_wape["unique_id"].nunique()
+        df_distribucion_wape["WAPE_ranking"] = df_distribucion_wape["WAPE_ranking"].replace([np.inf, -np.inf], np.nan)
         df_distribucion_wape_limpio = df_distribucion_wape.dropna(subset=["WAPE_ranking"]).copy()
+        articulos_wape_valido = df_distribucion_wape_limpio["unique_id"].nunique()
 
+        articulos_wape_revision = articulos_total - articulos_wape_valido
 
-        st.write(f"Cantidad de artículos con WAPE_ranking limpio: {len(df_distribucion_wape_limpio)}")
+        col1, col2, col3 = st.columns(3)
+
+        col1.metric(
+        "Artículos modelados",
+        f"{articulos_total:,}"
+        )
+
+        col2.metric(
+        "Artículos con WAPE válido",
+        f"{articulos_wape_valido:,}"
+        )
+
+        col3.metric(
+        "Artículos sin WAPE graficable",
+        f"{articulos_wape_revision:,}"
+         )
+
         st.write(f"datatype  {df_distribucion_wape_limpio['WAPE_ranking'].dtype}")
-        st.dataframe(df_distribucion_wape_limpio, use_container_width=True, hide_index=True)
+        st.dataframe(df_distribucion_wape_limpio.sort_values(by="WAPE_ranking"), use_container_width=True, hide_index=True)
+
         #df_distribucion_wape = pd.DataFrame(df_distribucion_wape_limpio, columns=["unique_id", "WAPE_ranking"])
         #st.area_chart(df_distribucion_wape)
+
+    # ============================================================
+    # 3. Slider para limitar outliers visuales
+    # ============================================================
+    # Muchos WAPE pueden ser muy altos y deformar el histograma.
+    # Este cap no elimina artículos, solo limita la visualización.
+    # ============================================================
+
+        limite_visual_max_wape = st.slider(
+        "Límite visual máximo de WAPE para el histograma",
+        min_value=10,
+        max_value=150,
+        value=150,
+        step=10
+        )
+
+        df_distribucion_wape_limpio["WAPE_ranking_visual"] = df_distribucion_wape_limpio["WAPE_ranking"].clip(
+        upper=limite_visual_max_wape
+        )
+    # ============================================================
+    # 4. Histograma de WAPE_ranking
+    # ============================================================
+
+        fig_wape=px.histogram(
+            df_distribucion_wape_limpio,
+            x="WAPE_ranking_visual",
+            nbins=30,
+            marginal="box",
+            title=f"Histograma de WAPE_ranking (limitado a {limite_visual_max_wape})",
+            labels={"WAPE_ranking_visual": "WAPE_ranking (%)",
+                    "count": "Cantidad de artículos"    },
+            color_discrete_sequence=["#636EFA"]
+        )
+        fig_wape.add_vline(
+            x=df_distribucion_wape_limpio["WAPE_ranking_visual"].median(),
+            line_dash="dash",
+            line_color="red",
+            annotation_text=f"Mediana: {df_distribucion_wape_limpio['WAPE_ranking_visual'].median():.2f}",
+            annotation_position="top right"
+        )
+
+        fig_wape.add_vline(
+            x=df_distribucion_wape_limpio["WAPE_ranking_visual"].mean(),
+            line_dash="dot",
+            line_color="green",
+            annotation_text=f"Media: {df_distribucion_wape_limpio['WAPE_ranking_visual'].mean():.2f}",
+            annotation_position="top left"
+        )
+
+        fig_wape.add_vline(
+            x=50,
+            line_dash="solid",
+            line_color="orange",
+            annotation_text="Umbral: 50%",
+            annotation_position="top right"
+        )
+
+        fig_wape.add_vline(
+            x=100,
+            line_dash="solid",
+            line_color="orange",
+            annotation_text="Umbral: 100%",
+            annotation_position="top right"
+        )
+
+        st.plotly_chart(fig_wape, use_container_width=True)
+
+        st.caption(
+        f"Nota: valores mayores a {limite_visual_max_wape}% se muestran agrupados visualmente "
+        f"en el límite superior para evitar que los outliers distorsionen la gráfica."
+    )   
+    # ============================================================
+    # 5. Categorizar WAPE para interpretación ejecutiva
+    # ============================================================
+
+        bins_wape=[0, 25,50,100,150, np.inf]
+
+        orden_categorias_wape=[
+        "0% - 25% | Muy bueno",
+        "25% - 50% | Aceptable",
+        "50% - 100% | Alto",
+        "100% - 150% | Muy alto",
+        ">150% | Revisión manual"
+        ]
+        df_distribucion_wape_limpio["WAPE_categoria"] = pd.cut(
+        df_distribucion_wape_limpio["WAPE_ranking"],
+        bins=bins_wape,
+        labels=orden_categorias_wape
+        )
+
+        resumen_wape=(
+        df_distribucion_wape_limpio["WAPE_categoria"]
+        .value_counts()
+        .reindex(orden_categorias_wape)
+        .reset_index()
+        )
+    # Asegurar que la categoría respete el orden lógico
+        resumen_wape["WAPE_categoria"] = pd.Categorical(
+        resumen_wape["WAPE_categoria"],
+        categories=orden_categorias_wape,
+        ordered=True
+        )
+        resumen_wape.columns=["Rango WAPE", "Cantidad de artículos"]
+
+        resumen_wape["Porcentaje(%)"] = (
+            round(resumen_wape["Cantidad de artículos"] / resumen_wape["Cantidad de artículos"].sum() * 100, 2)
+        )
+        st.markdown("### Resumen de artículos por categoría de WAPE")
+        st.dataframe(resumen_wape, use_container_width=True, hide_index=True)
+
+        # ============================================================
+        # 6. Gráfico de barras por categoría
+        # ============================================================
+        colores_wape = {
+        "0% - 25% | Muy bueno": "#2E7D32",          # Verde
+        "25% - 50% | Aceptable": "#8BC34A",        # Verde claro
+        "50% - 100% | Alto": "#FFC107",            # Amarillo
+        "100% - 150% | Muy alto": "#FF9800",       # Naranja
+        ">150% | Revisión manual": "#C62828"       # Rojo
+        }
+
+        fig_wape_categoria=px.bar(resumen_wape,
+            x="Rango WAPE",
+            y="Cantidad de artículos",
+            color="Rango WAPE",
+            color_discrete_map=colores_wape,
+            #text="Porcentaje",
+            #labels={"Cantidad de artículos": "Cantidad de artículos"},
+            title="Distribución de artículos por categoría WAPE",
+        )
+
+        st.plotly_chart(
+        fig_wape_categoria,
+        use_container_width=True
+        )
+
+        st.markdown("### Porcentaje de artículos por modelo ganador")
+        fig_pie=px.pie(
+        resumen_wape,
+        names="Rango WAPE",
+        color="Rango WAPE",
+        color_discrete_map=colores_wape,
+        values="Porcentaje(%)"
+        #use_container_width=True
+                    )
+        st.plotly_chart(fig_pie, use_container_width=True)
 
     with tab5:
         st.info("Pendiente: distribución de sesgo por modelo ganador.")
