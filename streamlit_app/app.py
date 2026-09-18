@@ -499,18 +499,20 @@ def main():
         st.plotly_chart(fig_pie, use_container_width=True)
 
     with tab5:
-        st.info("Pendiente: bias_total_abs_periodo_evaluacion.")
-
-        st.header("Distribucion del error absoluto total durante del periodo de evaluación")
+        
+        st.header("Distribucion Error absoluto total durante el periodo de evaluación")
+        st.info("Este análisis compara el WAPE_ranking contra el error absoluto total del período de evaluación para identificar qué artículos presentan errores mensuales altos y cuáles realmente generan desviaciones relevantes a nivel de cobertura total del intervalo. " \
+        "Para evitar que outliers extremos amplíen excesivamente las escalas y oculten las tendencias de la mayoría de los datos, se recomienda definir límites visuales mediante percentiles tanto para WAPE_ranking como para el error absoluto total.")
 
         df_bias_total = df_best_model_kpi[["unique_id", "bias_total_abs_periodo_evaluacion", "WAPE_ranking","sesgo"]].copy()
 
         df_bias_total["bias_total_abs_periodo_evaluacion"] = pd.to_numeric(df_bias_total["bias_total_abs_periodo_evaluacion"], errors="coerce")
 
         df_bias_total=df_bias_total.dropna(subset=["bias_total_abs_periodo_evaluacion"]).copy()
-
+        st.warning("Con el siguiente slider puedes ajustar visualmente el limite superior del error absoluto total (por percentil)")
+        bias_total_limite_max=st.slider("Percentil limite superior:", min_value=0.7, max_value=0.99, step=0.05, value=0.80)
         limite_inferior=df_bias_total["bias_total_abs_periodo_evaluacion"].quantile(0.01)
-        limite_superior=df_bias_total["bias_total_abs_periodo_evaluacion"].quantile(0.85)
+        limite_superior=df_bias_total["bias_total_abs_periodo_evaluacion"].quantile(bias_total_limite_max)
         df_bias_total["bias_visual"] = df_bias_total["bias_total_abs_periodo_evaluacion"].clip(lower=limite_inferior, upper=limite_superior)
 
         color_bias_map = {
@@ -525,7 +527,7 @@ def main():
             nbins=80,
             color="sesgo",
             color_discrete_map=color_bias_map,
-            title="Distribución del error absoluto total, limitada por percentiles 1% - 80%",
+            title=f"Distribución del Error absoluto total, limitada por percentiles 1% - {bias_total_limite_max*100}%",
             labels={"bias_total_abs_periodo_evaluacion": "error absoluto total del periodo de evaluación",
                     "sesgo": "Tipo de sesgo"
                     }
@@ -536,7 +538,8 @@ def main():
             x=0,
             line_dash="dash",
             annotation_text="Predicción exacta",
-            line_color="green"
+            line_color="green",
+    
         )
 
         fig_bias.add_vline(
@@ -552,6 +555,12 @@ def main():
         annotation_text="Percentil 80 visual del error absoluto total",
         line_color="red"
         )
+        
+        fig_bias.update_layout(
+        xaxis_title="Error absoluto total",
+        yaxis_title="Cantidad",
+        legend_title="Tipo de sesgo"
+        )
 
 
         st.plotly_chart(fig_bias, use_container_width=True)
@@ -560,50 +569,54 @@ def main():
         st.caption(f"La gráfica limita visualmente el error absoluto total entre "f"{limite_inferior:.1f} y {limite_superior:.1f} unidades. "
         "Los outliers no se eliminan del dataframe original.")
 
+        #df_bias_abs=df_best_model_kpi.copy()
 
+        #df_bias_total["bias_total_abs_periodo_evaluacion"] = df_bias_abs["bias_total_abs_periodo_evaluacion"].clip(lower=limite_inferior, upper=limite_superior)
 
-        st.subheader("Distribucion del error absoluto total del periodo")
+        #st.caption(f"La gráfica limita visualmente el error absoluto total entre "f"{limite_inferior:.1f} y {limite_superior:.1f} unidades. "
+        #"Los outliers no se eliminan del dataframe original."
+        #)
+        st.subheader("Relación entre Wape y Error absoluto total")
+        st.warning("Omitimos en este analisis WAPE_ranking=Infinito")
 
-        df_bias_abs=df_best_model_kpi.copy()
+        #df_calidad=df_best_model_kpi.copy()
+        #st.write(df_bias_total.info())
 
-        df_bias_abs["bias_total_abs_periodo_evaluacion"] = df_bias_abs["bias_total_abs_periodo_evaluacion"].clip(lower=limite_inferior, upper=limite_superior)
-
-        st.caption(f"La gráfica limita visualmente el error absoluto total entre "f"{limite_inferior:.1f} y {limite_superior:.1f} unidades. "
-        "Los outliers no se eliminan del dataframe original."
-        )
-        st.subheader("Relación entre Wape y error absoluto total del periodo ")
-        st.info("Omitimos en este analisis WAPE_ranking=Infinito")
-
-        df_calidad=df_best_model_kpi.copy()
-        st.write(df_calidad.info())
-
-        df_calidad=pd.to_numeric(df_calidad["WAPE_ranking"], errors="coerce")
+        df_bias_total["WAPE_ranking"]=pd.to_numeric(df_bias_total["WAPE_ranking"], errors="coerce")
+        df_bias_total["WAPE_ranking"] = df_bias_total["WAPE_ranking"].replace([np.inf, -np.inf], np.nan)
         #df_calidad["revision_manual"]=df_calidad["WAPE_Ranking"].isna() |df_calidad["WAPE_Ranking"].isin([float("inf"), float("-inf")])
-        st.dataframe(df_calidad, use_container_width=True)
-        df_calidad["bias_total_abs_periodo_evaluacion"]=pd.to_numeric(df_calidad["bias_total_abs_periodo_evaluacion"], errors="coerce")
-
-        df_calidad=df_calidad.dropna(subset=[
+        df_bias_total=df_bias_total.dropna(subset=[
             "WAPE_ranking",
             "bias_total_abs_periodo_evaluacion"
         ]).copy()
+        valores_NaN=df_bias_total["WAPE_ranking"].isna().sum()
+        
+        st.write(f"Comprobamos Dataframe no contenga valores nulos o infinitos en WAPE_ranking. La cantidad de valores igual a NaN es igual a {valores_NaN}")
+        st.dataframe(df_bias_total.sort_values(by="bias_visual", ascending=True), use_container_width=True)
+        #df_bias_total["bias_total_abs_periodo_evaluacion"]=pd.to_numeric(df_calidad["bias_total_abs_periodo_evaluacion"], errors="coerce")
+        st.write("Definir quantile limite superior")
+        x=st.slider("Cuantile para limite superior", min_value=0.7, max_value=0.99, step=0.05, value=0.85)
+        limite_inferior=df_bias_total["WAPE_ranking"].quantile(0.01)
+        limite_superior=df_bias_total["WAPE_ranking"].quantile(x)
+        df_bias_total["Wape_winsorizado"] = df_bias_total["bias_total_abs_periodo_evaluacion"].clip(lower=limite_inferior, upper=limite_superior)
 
         fig_scatter=px.scatter(
-            df_calidad, 
-            x="WAPE_ranking",
-            y="bias_total_abs_periodo_evaluacion",
-            color="best_model",
+            df_bias_total, 
+            x="Wape_winsorizado",
+            y="bias_visual",
+            #color="best_model",
             hover_data=[
                 "unique_id",
-                "best_model",
-                "WAPE_ranking",
-                "bias_total_abs_periodo_evaluacion",
+                #"best_model",
+                "Wape_winsorizado",
+                "bias_visual",
                 "sesgo"
             ],
             title="WAPE Vs. error absoluto total del periodo",
             labels={
-                "WAPE_ranking": "Wape ranking (%)",
-                "bias_total_abs_periodo_evaluacion": "Erorr abs. total en periodo de eval.",
-                "best_model": "modelo ganador"
+                "Wape_winsorizado": "Wape ranking (%)",
+                "bias_visual": "Erorr abs. total en periodo de eval.",
+                #"best_model": "modelo ganador"
             }
         )
 
