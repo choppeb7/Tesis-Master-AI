@@ -499,11 +499,311 @@ def main():
         st.plotly_chart(fig_pie, use_container_width=True)
 
     with tab5:
-        st.info("Pendiente: distribución de sesgo por modelo ganador.")
+        st.info("Pendiente: bias_total_abs_periodo_evaluacion.")
+
+        st.header("Distribucion del error absoluto total durante del periodo de evaluación")
+
+        df_bias_total = df_best_model_kpi[["unique_id", "bias_total_abs_periodo_evaluacion", "WAPE_ranking","sesgo"]].copy()
+
+        df_bias_total["bias_total_abs_periodo_evaluacion"] = pd.to_numeric(df_bias_total["bias_total_abs_periodo_evaluacion"], errors="coerce")
+
+        df_bias_total=df_bias_total.dropna(subset=["bias_total_abs_periodo_evaluacion"]).copy()
+
+        limite_inferior=df_bias_total["bias_total_abs_periodo_evaluacion"].quantile(0.01)
+        limite_superior=df_bias_total["bias_total_abs_periodo_evaluacion"].quantile(0.85)
+        df_bias_total["bias_visual"] = df_bias_total["bias_total_abs_periodo_evaluacion"].clip(lower=limite_inferior, upper=limite_superior)
+
+        color_bias_map = {
+            "Sobrepronóstico": "#0E71F1",  # azul
+            "Subpronóstico": "#F10E0E",    # rojo
+            "Exacto": "#0EF1A3"            # verde
+        }
+
+        fig_bias=px.histogram(
+            df_bias_total,
+            x="bias_visual",
+            nbins=80,
+            color="sesgo",
+            color_discrete_map=color_bias_map,
+            title="Distribución del error absoluto total, limitada por percentiles 1% - 80%",
+            labels={"bias_total_abs_periodo_evaluacion": "error absoluto total del periodo de evaluación",
+                    "sesgo": "Tipo de sesgo"
+                    }
+            )
+        
+
+        fig_bias.add_vline(
+            x=0,
+            line_dash="dash",
+            annotation_text="Predicción exacta",
+            line_color="green"
+        )
+
+        fig_bias.add_vline(
+            x=df_bias_total["bias_visual"].median(),
+            line_dash="dash",
+            annotation_text="Mediana visual del error absoluto total",
+            line_color="green"
+        )
+
+        fig_bias.add_vline(
+        x=df_bias_total["bias_visual"].quantile(0.85),
+        line_dash="dash",
+        annotation_text="Percentil 80 visual del error absoluto total",
+        line_color="red"
+        )
+
+
+        st.plotly_chart(fig_bias, use_container_width=True)
+
+
+        st.caption(f"La gráfica limita visualmente el error absoluto total entre "f"{limite_inferior:.1f} y {limite_superior:.1f} unidades. "
+        "Los outliers no se eliminan del dataframe original.")
+
+
+
+        st.subheader("Distribucion del error absoluto total del periodo")
+
+        df_bias_abs=df_best_model_kpi.copy()
+
+        df_bias_abs["bias_total_abs_periodo_evaluacion"] = df_bias_abs["bias_total_abs_periodo_evaluacion"].clip(lower=limite_inferior, upper=limite_superior)
+
+        st.caption(f"La gráfica limita visualmente el error absoluto total entre "f"{limite_inferior:.1f} y {limite_superior:.1f} unidades. "
+        "Los outliers no se eliminan del dataframe original."
+        )
+        st.subheader("Relación entre Wape y error absoluto total del periodo ")
+        st.info("Omitimos en este analisis WAPE_ranking=Infinito")
+
+        df_calidad=df_best_model_kpi.copy()
+        st.write(df_calidad.info())
+
+        df_calidad=pd.to_numeric(df_calidad["WAPE_ranking"], errors="coerce")
+        #df_calidad["revision_manual"]=df_calidad["WAPE_Ranking"].isna() |df_calidad["WAPE_Ranking"].isin([float("inf"), float("-inf")])
+        st.dataframe(df_calidad, use_container_width=True)
+        df_calidad["bias_total_abs_periodo_evaluacion"]=pd.to_numeric(df_calidad["bias_total_abs_periodo_evaluacion"], errors="coerce")
+
+        df_calidad=df_calidad.dropna(subset=[
+            "WAPE_ranking",
+            "bias_total_abs_periodo_evaluacion"
+        ]).copy()
+
+        fig_scatter=px.scatter(
+            df_calidad, 
+            x="WAPE_ranking",
+            y="bias_total_abs_periodo_evaluacion",
+            color="best_model",
+            hover_data=[
+                "unique_id",
+                "best_model",
+                "WAPE_ranking",
+                "bias_total_abs_periodo_evaluacion",
+                "sesgo"
+            ],
+            title="WAPE Vs. error absoluto total del periodo",
+            labels={
+                "WAPE_ranking": "Wape ranking (%)",
+                "bias_total_abs_periodo_evaluacion": "Erorr abs. total en periodo de eval.",
+                "best_model": "modelo ganador"
+            }
+        )
+
+        fig_scatter.add_vline(
+        x=100,
+        line_dash="dash",
+        annotation_text="WAPE 100%"
+        )
+
+        st.plotly_chart(
+        fig_scatter,
+        use_container_width=True
+        )
+            
+
+
+
+
 
     with tab6:
         st.info("Pendiente: distribución de modelos ganadores por cluster de ventas.")
+#============================================================
+# 3. Preparar dataframe base artículo + cluster
+#============================================================
+# Tomamos una sola fila por artículo para evitar duplicados.
+#============================================================
 
+        df_articulo_cluster = (
+        df_resultado_kpi[
+            ["unique_id", "cluster_kmeans_final", "descripcion_cluster"]
+        ]
+        .drop_duplicates()
+        .copy()
+        )
+    # ============================================================
+    # 4. Preparar dataframe de modelos ganadores
+    # ============================================================
+
+        df_modelo_ganador = (
+        df_best_model_kpi[
+            ["unique_id", "best_model"]
+        ]
+        .drop_duplicates()
+        .copy()
+        )
+
+#============================================================
+# 5. Unir modelo ganador con cluster
+#============================================================
+
+        df_modelo_cluster = df_modelo_ganador.merge(
+        df_articulo_cluster,
+        on="unique_id",
+        how="left",
+        validate="one_to_one"
+        )
+
+        #Eliminar articulos sin cluster asignado
+        df_modelo_cluster = df_modelo_cluster.dropna(subset=["cluster_kmeans_final"]).copy()
+
+        #Convertir cluster a texto para que plotly lo interprete como categoría
+        df_modelo_cluster["cluster_kmeans_final"] = df_modelo_cluster["cluster_kmeans_final"].astype(str)
+
+        #resumen_modelo_clusterdf_modelo_cluster.groupby(["cluster_kmeans_final", "descripcion_cluster"])
+        st.dataframe(df_modelo_cluster, use_container_width=True, hide_index=True)
+
+# ============================================================
+# 6. Crear tabla de conteo modelo ganador por cluster
+# ============================================================
+
+        resumen_modelo_cluster = (
+        df_modelo_cluster
+        .groupby(["cluster_kmeans_final", "best_model"])
+        .size()
+        .reset_index(name="Cantidad de artículos")
+        )
+        #st.dataframe(resumen_modelo_cluster, use_container_width=True, hide_index=True)
+
+        resumen_modelo_cluster["Total cluster"] = (
+        resumen_modelo_cluster
+        .groupby("cluster_kmeans_final")["Cantidad de artículos"]
+        .transform("sum")
+        )
+        #st.dataframe(resumen_modelo_cluster, use_container_width=True, hide_index=True)
+
+        resumen_modelo_cluster["Porcentaje dentro del cluster"] = (
+        resumen_modelo_cluster["Cantidad de artículos"]
+        / resumen_modelo_cluster["Total cluster"]
+        * 100
+        )
+
+        resumen_modelo_cluster["Porcentaje texto"] = (
+        resumen_modelo_cluster["Porcentaje dentro del cluster"]
+        .round(1)
+        .astype(str)
+        + "%"
+        )
+# ============================================================
+# 8. KPIs rápidos del tab
+# ============================================================
+        total_articulos_con_cluster=df_modelo_cluster["unique_id"].nunique()
+        total_clusters=df_modelo_cluster["cluster_kmeans_final"].nunique()
+        total_modelos_ganadores=df_modelo_cluster["best_model"].nunique()
+
+        col1, col2, col3=st.columns(3)
+
+        col1.metric("Total artículos con cluster",f"{total_articulos_con_cluster:,}")
+
+        col2.metric("Total clusters",f"{total_clusters:,}")
+
+        col3.metric("Total modelos ganadores",f"{total_modelos_ganadores:,}")
+
+# ============================================================
+# 9. Gráfico de barras apiladas por cantidad
+# ============================================================
+
+        st.markdown("### Gráfico de barras apiladas: cantidad de artículos por modelo y cluster")
+
+        fig_barras_apiladas=px.bar(
+            resumen_modelo_cluster,
+            x="cluster_kmeans_final",
+            y="Cantidad de artículos",
+            color="best_model",
+            text="Cantidad de artículos",
+            labels={
+                "cluster_kmeans_final": "Cluster",
+                "Cantidad de artículos": "Cantidad de artículos",
+                "best_model": "Modelo ganador"
+            },
+            title="Cantidad de artículos por modelo ganador y cluster",
+        )
+
+        fig_barras_apiladas.update_layout(
+        barmode="stack",
+        xaxis_title="Cluster de ventas",
+        yaxis_title="Cantidad de artículos",
+        legend_title="Modelo ganador"
+        )
+
+        fig_barras_apiladas.update_traces(
+        textposition="inside"
+        )
+
+        st.plotly_chart(fig_barras_apiladas, use_container_width=True)
+    # ============================================================
+    # 10. Gráfico de barras apiladas porcentual
+    # ============================================================
+    # Este gráfico es más interpretativo, porque todos los clusters
+    # quedan comparables en escala de 0% a 100%.
+    # ============================================================
+        st.markdown("### Distribución porcentual de modelos ganadores por cluster")
+
+        fig_cluster_porcentual=px.bar(
+            resumen_modelo_cluster,
+            x="cluster_kmeans_final",
+            y="Porcentaje dentro del cluster",
+            color="best_model",
+            text="Porcentaje texto",
+            labels={
+                "cluster_kmeans_final": "Cluster",
+                "Porcentaje dentro del cluster": "Porcentaje de artículos",
+                "best_model": "Modelo ganador"
+            }
+            )
+        
+        fig_cluster_porcentual.update_layout(
+        barmode="stack",
+        xaxis_title="Cluster de ventas",
+        yaxis_title="Porcentaje dentro del cluster",
+        legend_title="Modelo ganador",
+        yaxis=dict(range=[0, 100])
+        )
+
+        fig_cluster_porcentual.update_traces(
+        textposition="inside"
+        )
+
+        st.plotly_chart(fig_cluster_porcentual, use_container_width=True)
+
+    # ============================================================
+    # 11. Tabla resumen
+    # ============================================================
+
+        st.markdown("### Tabla resumen modelo ganador por cluster")
+
+        tabla_resumen_modelo_cluster = resumen_modelo_cluster.sort_values(
+        by=["cluster_kmeans_final", "Cantidad de artículos"],
+        ascending=[True, False]
+        )
+
+        tabla_resumen_modelo_cluster["Porcentaje dentro del cluster"] = (
+        tabla_resumen_modelo_cluster["Porcentaje dentro del cluster"]
+        .round(1)
+        )
+
+        st.dataframe(
+        tabla_resumen_modelo_cluster,
+        use_container_width=True,
+        hide_index=True
+        )       
 
 # ============================================================
 # PUNTO DE ENTRADA DE LA APP
