@@ -42,10 +42,10 @@ def ejecutar_forecast_filter(
     #1. Rutas de entrada y salida
     #============================================================
     if ruta_input is None: 
-        ruta_input= Path(FORECAST_APP_DIR) / "data" / "output" / "df_forecast_preparado.xlsx"
+        ruta_input= Path(FORECAST_APP_DIR) / "data" / "output" / "df_OITM_Ventas_preparado.xlsx"
 
     if ruta_output is None: 
-        ruta_output= Path(FORECAST_APP_DIR) / "data" / "output" / "df_forecast_segmentado.xlsx"
+        ruta_output= Path(FORECAST_APP_DIR) / "data" / "output" / "df_OITM_Ventas_after_forecast_filter.xlsx"
 
     if directorio_figuras is None:
         directorio_figuras= Path(FORECAST_APP_DIR) / "reports" / "figures" / "02_forecast_filter"
@@ -134,15 +134,78 @@ def ejecutar_forecast_filter(
 
         rutas_graficas.append(guardar_grafico_barras_conteo(
                     df=df_segmentado,
-                    columna="aplica_forecast_automatico",
+                    columna="aplica_forecast_revision_manual",
                     directorio_salida=directorio_figuras,
-                    titulo="Conteo de artículos por aplicación de forecast automático",
-                    nombre_archivo="04_grafico_barras_aplica_forecast_automatico.png"
+                    titulo="Artículos aplicables a forecast por revisión manual",
+                    nombre_archivo="04_grafico_barras_aplica_forecast_revision_manual.png"
                 ))
-        print(f"Gráfico de barras seg. aplica a Forecastautomático exportado correctamente ✅ Ruta: {rutas_graficas[-1]}")
+        print(f"Gráfico de barras seg. aplica a Forecastrevision manual exportado correctamente ✅ Ruta: {rutas_graficas[-1]}")
 
-        if tipo
+        if "clasificacion_alcance_inventario_24m" in df_segmentado.columns:
+            rutas_graficas.append(
+                guardar_grafico_barras_conteo(
+                    df=df_segmentado,
+                    columna="clasificacion_alcance_inventario_24m",
+                    directorio_salida=directorio_figuras,
+                    titulo="Distribución por clasificación de alcance de inventario",
+                    nombre_archivo="05_barras_clasificacion_alcance.png"
+                )
+            )
+        print ("Graficas guardadas correctamente ✅")
+        print("Rutas de las gráficas generadas:")
+        for ruta in rutas_graficas:
+            print(ruta)
         
+
+        rutas_tablas=[]
+
+        if exportar_tablas:
+            print("Exportando tablas de resumen de los segmentos...")
+
+            rutas_tablas.append(
+                guardar_tabla_resumen_segmento(
+                    df=df_segmentado,
+                    columna_segmento="segmento_forecast",
+                    directorio_salida=directorio_tablas,
+                    nombre_archivo="01_resumen_segmento_forecast.xlsx"
+                )
+            )
+            print(f"Tabla resumen por segmento exportada correctamente ✅ Ruta: {rutas_tablas[-1]}")
+
+            conteo_segmento=df_segmentado["segmento_forecast"].value_counts(dropna=False).reset_index()
+            conteo_segmento.columns=["segmento_forecast", "cantidad_articulos"]
+
+            ruta_conteo_segmento=directorio_tablas / "02_conteo_segmento_forecast.xlsx"
+            rutas_tablas.append(ruta_conteo_segmento)
+            conteo_segmento.to_excel(ruta_conteo_segmento, index=False)
+            print(f"Tabla de conteo por segmento exportada correctamente ✅ Ruta: {ruta_conteo_segmento}")
+
+            print("Tablas de resumen exportadas correctamente ✅")
+            print("Rutas de las tablas generadas:")
+            for ruta in rutas_tablas:
+                print(ruta)
+
+            print("=" * 80)
+            print("Pipeline 02: Filtro y Segmentación de Forecast finalizado correctamente ✅"  )
+    return df_segmentado
+def main():
+    df=ejecutar_forecast_filter()
+    print("Pipeline ejecutado correctamente. Dataframe resultante:")
+    print(df[
+                "codigo_articulo",
+                "segmento_forecast",
+                "aplica_forecast_automatico",
+                "aplica_forecast_revision_manual",
+                "clasificacion_alcance_inventario_24m"
+
+    ].head())
+
+
+
+
+        
+
+
 
 
 

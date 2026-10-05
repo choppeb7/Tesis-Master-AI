@@ -32,6 +32,7 @@ from pipeline.data_preparation.inventory_rules import (
     mostrar_resumen_reglas_inventario
 )
 
+from utils.reporting import guardar_grafico_barras_conteo, asegurar_directorio, limpiar_nombre_archivo, guardar_grafico_pastel_conteo, guardar_tabla_resumen_segmento
 
 def resolver_ruta_fabricantes(ruta_fabricantes=None):
     """
@@ -77,6 +78,19 @@ def resolver_directorio_output(directorio_output=None):
         / "output"
     )
 
+def resolver_directorio_figuras(directorio_figuras=None):
+    if directorio_figuras is not None:
+        return Path(directorio_figuras)
+
+    project_root = Path(__file__).resolve().parents[3]
+
+    return (
+        project_root
+        / "forecast_app"
+        / "reports"
+        / "figures"
+        / "01_data_preprocesada"
+    )
 
 def ejecutar_preparacion_datos(
     ruta_fabricantes=None,
@@ -282,6 +296,34 @@ def ejecutar_preparacion_datos(
     print("\n" + "=" * 100)
     print("PIPELINE DATA PREPARATION FINALIZADO ✅")
     print("=" * 100)
+
+    #============================================================
+    #11. Exportar imagenes y tablas resumen 
+    #============================================================
+
+    directorio_figuras = resolver_directorio_figuras()
+    directorio_figuras = Path(directorio_figuras)
+    rutas_graficas = []
+    print(f"Directorio de figuras para graficas resumen data preprocesada: {directorio_figuras}")
+
+    rutas_graficas.append(guardar_grafico_barras_conteo(
+        df=df_final,
+        columna="criticidad_comercial",
+        directorio_salida=directorio_figuras,
+        titulo="Conteo de artículos por criticidad comercial",
+        nombre_archivo="01_grafico_barras_criticidad_comercial.png"
+    ))
+    print(f"Gráfico de barras exportado correctamente ✅ Ruta: {rutas_graficas[-1]}")
+
+    rutas_graficas.append(guardar_grafico_barras_conteo(
+            df=df_final,
+            columna="meses_con_venta_24m",
+            directorio_salida=directorio_figuras,
+            titulo="Conteo de artículos por meses con venta (24m)",
+            nombre_archivo="02_grafico_barras_meses_con_venta_24m.png"
+        ))
+    print(f"Gráfico de barras exportado correctamente ✅ Ruta: {rutas_graficas[-1]}")
+
 
     return df_final
 

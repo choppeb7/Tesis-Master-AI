@@ -29,24 +29,60 @@ def asegurar_directorio(ruta):
 
 
 
+def preparar_resumen_conteo(df, columna, top_n=None):
+    """
+    Genera una tabla resumen con:
+    - categoria
+    - cantidad
+    - porcentaje
+    """
+
+    serie = df[columna].fillna("Sin dato").astype(str).str.strip()
+
+    conteo = serie.value_counts(dropna=False)
+
+    if top_n is not None:
+        conteo = conteo.head(top_n)
+
+    df_resumen = conteo.reset_index()
+    df_resumen.columns = [columna, "cantidad"]
+
+    total = df_resumen["cantidad"].sum()
+
+    df_resumen["porcentaje"] = (
+        df_resumen["cantidad"] / total * 100
+    ).round(2)
+
+    return df_resumen
+
+
 def guardar_grafico_barras_conteo(
     df,
     columna,
     directorio_salida,
     titulo=None,
     nombre_archivo=None,
-    top_n=None
+    top_n=None,
+    mostrar_porcentaje=True,
+    color_barras="#4C78A8",
+    figsize=(10, 6),
+    rotacion_xticks=45,
+    fontsize_etiqueta=10
 ):
     """
     Guarda un gráfico de barras con el conteo de una columna categórica.
+    Muestra arriba de cada barra:
+    - cantidad
+    - porcentaje
     """
 
     directorio_salida = asegurar_directorio(directorio_salida)
 
-    conteo = df[columna].value_counts(dropna=False)
-
-    if top_n is not None:
-        conteo = conteo.head(top_n)
+    df_resumen = preparar_resumen_conteo(
+        df=df,
+        columna=columna,
+        top_n=top_n
+    )
 
     if titulo is None:
         titulo = f"Distribución de {columna}"
@@ -56,15 +92,48 @@ def guardar_grafico_barras_conteo(
 
     ruta_salida = directorio_salida / nombre_archivo
 
-    plt.figure(figsize=(10, 6))
-    conteo.plot(kind="bar")
+    fig, ax = plt.subplots(figsize=figsize)
 
-    plt.title(titulo)
-    plt.xlabel(columna)
-    plt.ylabel("Cantidad de artículos")
-    plt.xticks(rotation=45, ha="right")
+    bars = ax.bar(
+        df_resumen[columna],
+        df_resumen["cantidad"],
+        color=color_barras
+    )
+
+    # ------------------------------------------------------------
+    # Etiquetas sobre cada barra
+    # ------------------------------------------------------------
+    max_y = df_resumen["cantidad"].max()
+
+    for bar, cantidad, porcentaje in zip(
+        bars,
+        df_resumen["cantidad"],
+        df_resumen["porcentaje"]
+    ):
+        x = bar.get_x() + bar.get_width() / 2
+        y = bar.get_height()
+
+        if mostrar_porcentaje:
+            etiqueta = f"{cantidad}\n({porcentaje:.1f}%)"
+        else:
+            etiqueta = f"{cantidad}"
+
+        ax.text(
+            x,
+            y + max_y * 0.01,
+            etiqueta,
+            ha="center",
+            va="bottom",
+            fontsize=fontsize_etiqueta
+        )
+
+    ax.set_title(titulo)
+    ax.set_xlabel(columna)
+    ax.set_ylabel("Cantidad de artículos")
+    ax.set_xticklabels(df_resumen[columna], rotation=45, ha="right")
+    ax.grid(axis="y", alpha=0.3)
+
     plt.tight_layout()
-
     plt.savefig(ruta_salida, dpi=500, bbox_inches="tight")
     plt.close()
 
@@ -77,19 +146,29 @@ def guardar_grafico_pastel_conteo(
     directorio_salida,
     titulo=None,
     nombre_archivo=None,
-    top_n=None
+    top_n=None,
+    figsize=(8, 8),
+    startangle=90,
+    mostrar_leyenda=True,
+    usar_etiquetas_externas=False
 ):
     """
-    Guarda un gráfico de pastel con el conteo porcentual de una columna categórica.
-    Recomendado para columnas con pocas categorías.
+    Guarda un gráfico de pastel con:
+    - porcentaje
+    - cantidad
+
+    Puede mostrar:
+    - texto dentro del segmento
+    - o leyenda lateral con categoría, cantidad y porcentaje
     """
 
     directorio_salida = asegurar_directorio(directorio_salida)
 
-    conteo = df[columna].value_counts(dropna=False)
-
-    if top_n is not None:
-        conteo = conteo.head(top_n)
+    df_resumen = preparar_resumen_conteo(
+        df=df,
+        columna=columna,
+        top_n=top_n
+    )
 
     if titulo is None:
         titulo = f"Distribución porcentual de {columna}"
@@ -99,15 +178,58 @@ def guardar_grafico_pastel_conteo(
 
     ruta_salida = directorio_salida / nombre_archivo
 
-    plt.figure(figsize=(8, 8))
-    conteo.plot(kind="pie", autopct="%1.1f%%", startangle=90)
+    valores = df_resumen["cantidad"]
+    categorias = df_resumen[columna]
 
-    plt.title(titulo)
-    plt.ylabel("")
+    def autopct_personalizado(pct):
+        total = valores.sum()
+        cantidad = int(round(pct * total / 100.0))
+        return f"{pct:.1f}%\n({cantidad})"
+
+    fig, ax = plt.subplots(figsize=figsize)
+
+    if usar_etiquetas_externas:
+        wedges, texts, autotexts = ax.pie(
+            valores,
+            labels=categorias,
+            autopct=autopct_personalizado,
+            startangle=startangle
+        )
+    else:
+        wedges, texts, autotexts = ax.pie(
+            valores,
+            autopct=autopct_personalizado,
+            startangle=startangle
+        )
+
+    ax.set_title(titulo)
+    ax.axis("equal")
+
+    # ------------------------------------------------------------
+    # Leyenda con detalle completo
+    # ------------------------------------------------------------
+    if mostrar_leyenda:
+        etiquetas_leyenda = [
+            f"{cat} | {cant} ({pct:.1f}%)"
+            for cat, cant, pct in zip(
+                df_resumen[columna],
+                df_resumen["cantidad"],
+                df_resumen["porcentaje"]
+            )
+        ]
+
+        ax.legend(
+            wedges,
+            etiquetas_leyenda,
+            title=columna,
+            loc="center left",
+            bbox_to_anchor=(1, 0.5)
+        )
+
     plt.tight_layout()
-
     plt.savefig(ruta_salida, dpi=500, bbox_inches="tight")
     plt.close()
+# 
 
     return ruta_salida
 
