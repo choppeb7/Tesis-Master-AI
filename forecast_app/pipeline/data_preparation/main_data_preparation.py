@@ -324,6 +324,42 @@ def ejecutar_preparacion_datos(
         ))
     print(f"Gráfico de barras exportado correctamente ✅ Ruta: {rutas_graficas[-1]}")
 
+    rutas_graficas.append(guardar_grafico_barras_conteo(
+                df=df_final,
+                columna="cantidad_clientes_24m",
+                directorio_salida=directorio_figuras,
+                titulo="Conteo de artículos por cantidad de clientes (24m)",
+                nombre_archivo="03_grafico_barras_cantidad_clientes_24m.png"
+            ))
+    
+    print(f"Gráfico de barras exportado correctamente ✅ Ruta: {rutas_graficas[-1]}")
+
+    rutas_graficas.append(guardar_grafico_pastel_conteo(
+                df=df_final,
+                columna="tipo_abastecimiento",
+                directorio_salida=directorio_figuras,
+                titulo="Distribución porcentual de artículos por tipo de abastecimiento",
+                nombre_archivo="04_grafico_pastel_tipo_abastecimiento.png"
+            ))
+    print(f"Gráfico de pastel exportado correctamente ✅ Ruta: {rutas_graficas[-1]}")
+
+    rutas_graficas.append(guardar_grafico_pastel_conteo(
+                df=df_final,
+                columna="tipo_abastecimiento",
+                directorio_salida=directorio_figuras,
+                titulo="Distribución porcentual de artículos por tipo de abastecimiento",
+                nombre_archivo="05_grafico_pastel_tipo_abastecimiento.png"
+            ))
+    
+    print(f"Gráfico de pastel exportado correctamente ✅ Ruta: {rutas_graficas[-1]}")
+    rutas_graficas.append(guardar_grafico_pastel_conteo(
+                df=df_final,
+                columna="decision_compra",
+                directorio_salida=directorio_figuras,
+                titulo="Distribución porcentual de artículos por decisión de compra",
+                nombre_archivo="06_grafico_pastel_decision_compra.png"
+            ))
+    print(f"Gráfico de pastel exportado correctamente ✅ Ruta: {rutas_graficas[-1]}")
 
     return df_final
 

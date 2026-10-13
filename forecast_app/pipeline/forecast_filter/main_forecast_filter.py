@@ -188,6 +188,8 @@ def ejecutar_forecast_filter(
             print("=" * 80)
             print("Pipeline 02: Filtro y Segmentación de Forecast finalizado correctamente ✅"  )
     return df_segmentado
+
+    
 def main():
     df=ejecutar_forecast_filter()
     print("Pipeline ejecutado correctamente. Dataframe resultante:")
