@@ -3,6 +3,7 @@ import sys
 import pandas as pd
 
 
+
 # ============================================================
 # AJUSTE DE RUTA PARA IMPORTAR forecast_app
 # ============================================================
@@ -17,76 +18,93 @@ if str(FORECAST_APP_DIR) not in sys.path:
 # ============================================================
 # IMPORTS DEL PIPELINE 03
 # ============================================================
-
+from pipeline.forecast_eda.eda_feature_engineering import (
+    agregar_feature_engineering_a_dataframe,
+    generar_resumen_variables_eda
+)
 from pipeline.forecast_eda.eda_config import (
     RUTA_INPUT_FORECAST_FILTER,
-    RUTA_OUTPUT_EDA,
+    RUTA_OUTPUT_FORECAST_EDA,
     COLUMNAS_CONTEXTO_EDA,
-    MESES_HISTORICO_EDA
+    MESES_HISTORICO_EDA,
+    COLUMNA_FILTRO_SEGMENTO_FORECAST,
+    VALOR_FILTRO_SEGMENTO_FORECAST,
+    VARIABLES_CALCULADAS_EDA
 )
 
 from pipeline.forecast_eda.eda_matrix_preparation import (
     preparar_base_y_matriz_eda
 )
+from pipeline.forecast_eda.eda_classification_rules import (
+    aplicar_clasificaciones_eda,
+    validar_columnas_clasificacion_generadas,
+    generar_resumen_clasificaciones_eda,
+    generar_resumen_cruzado_clasificaciones,
+    generar_resumen_clasificaciones_por_columna
+)
 
 
 # ============================================================
-# VALIDACIÓN DE PREPARACIÓN BASE Y MATRIZ
+# VALIDACIÓN DE MATRIZ POR CÓDIGO DE ARTÍCULO
 # ============================================================
 
-def validar_salida_preparacion_eda(
+def validar_salida_matriz_eda(
     df_eda,
     ventas_24m,
-    columnas_venta_24m
+    columnas_venta_24m,
+    columna_id="codigo_articulo"
 ):
-    """
-    Valida que la función preparar_base_y_matriz_eda haya generado
-    resultados consistentes.
-    """
 
-    errores = []
+    if df_eda.empty or ventas_24m.empty:
+        raise ValueError("La base EDA o la matriz de ventas está vacía.")
 
-    if df_eda.empty:
-        errores.append("df_eda está vacío.")
+    if columna_id not in df_eda.columns:
+        raise ValueError(f"Falta la columna {columna_id} en df_eda.")
 
-    if ventas_24m.empty:
-        errores.append("ventas_24m está vacío.")
+    if df_eda[columna_id].isna().any():
+        raise ValueError("Existen códigos de artículo nulos.")
 
-    if len(columnas_venta_24m) == 0:
-        errores.append("No se detectaron columnas de venta mensual.")
+    if not df_eda[columna_id].is_unique:
+        raise ValueError("Existen códigos duplicados en df_eda.")
 
-    if df_eda.shape[0] != ventas_24m.shape[0]:
-        errores.append(
-            "La cantidad de filas de df_eda no coincide con la matriz ventas_24m."
-        )
-
-    if ventas_24m.shape[1] != len(columnas_venta_24m):
-        errores.append(
-            "La cantidad de columnas de ventas_24m no coincide con columnas_venta_24m."
-        )
-
-    columnas_minimas = [
-        "codigo_articulo",
-        "descripcion_completa"
-    ]
-
-    for columna in columnas_minimas:
-        if columna not in df_eda.columns:
-            errores.append(f"Falta columna mínima en df_eda: {columna}")
-
-    if errores:
-        mensaje_error = "\n".join(errores)
+    if ventas_24m.index.name != columna_id:
         raise ValueError(
-            "Errores detectados en la preparación EDA:\n"
-            + mensaje_error
+            f"La matriz debe utilizar {columna_id} como índice."
+        )
+
+    if not ventas_24m.index.is_unique:
+        raise ValueError("Existen códigos duplicados en ventas_24m.")
+
+    codigos_base = set(df_eda[columna_id].astype(str))
+    codigos_matriz = set(ventas_24m.index.astype(str))
+
+    if codigos_base != codigos_matriz:
+        raise ValueError(
+            "Los artículos de df_eda no coinciden con los de ventas_24m."
+        )
+
+    if list(ventas_24m.columns) != list(columnas_venta_24m):
+        raise ValueError(
+            "Las columnas mensuales de la matriz no coinciden."
         )
 
     return True
 
+# ============================================================
+# FUNCIÓN PRINCIPAL DEL PIPELINE 03
+# ============================================================
 
-def ejecutar_validacion_preparacion_base_matriz(
+def ejecutar_eda(
     ruta_input=RUTA_INPUT_FORECAST_FILTER,
-    exportar_muestra=True
+    ruta_output=RUTA_OUTPUT_FORECAST_EDA,
+    columna_filtro=COLUMNA_FILTRO_SEGMENTO_FORECAST,
+    valor_filtro=VALOR_FILTRO_SEGMENTO_FORECAST,
+    columnas_contexto=COLUMNAS_CONTEXTO_EDA,
+    meses_historico=MESES_HISTORICO_EDA,
+    exportar_muestra=True,
+    columna_id="codigo_articulo",
+    exportar_excel=True,
+    exportar_validacion=True
 ):
     """
     Ejecuta una validación inicial del pipeline 03.
@@ -96,21 +114,28 @@ def ejecutar_validacion_preparacion_base_matriz(
 
     Flujo:
     1. Lee el archivo generado por pipeline 02.
-    2. Filtra artículos con aplica_forecast_automatico == True.
+    2. Filtra artículos según columna_filtro y valor_filtro.
     3. Detecta columnas mensuales de venta.
-    4. Prepara la matriz de ventas de los últimos 24 meses.
+    4. Prepara la matriz de ventas de los últimos N meses.
     5. Valida consistencia entre df_eda y ventas_24m.
     6. Exporta una muestra opcional para revisión manual.
     """
 
     print("=" * 100)
-    print("PIPELINE 03 - VALIDACIÓN PREPARACIÓN BASE Y MATRIZ EDA")
+    print("PIPELINE 03 - FORECAST EDA")
     print("=" * 100)
 
+    # ========================================================
+    # 1. CARGA DE DATOS
+    # ========================================================
     ruta_input = Path(ruta_input)
+    ruta_output = Path(ruta_output)
 
     print("\nArchivo input:")
     print(ruta_input)
+
+    print("\nFiltro aplicado:")
+    print(f"{columna_filtro} == {valor_filtro}")
 
     if not ruta_input.exists():
         raise FileNotFoundError(
@@ -129,16 +154,26 @@ def ejecutar_validacion_preparacion_base_matriz(
     print("Filas input:", df.shape[0])
     print("Columnas input:", df.shape[1])
 
+    if columna_filtro not in df.columns:
+        raise ValueError(
+            f"La columna de filtro '{columna_filtro}' no existe en el archivo input."
+        )
+
+    print("\nDistribución de la columna de filtro antes de filtrar:")
+    print(df[columna_filtro].value_counts(dropna=False).head(20))
+
     # ============================================================
     # 2. Preparar base y matriz EDA
     # ============================================================
 
     print("\nPreparando base EDA y matriz de ventas...")
 
-    df_eda, ventas_24m, columnas_venta_24m = preparar_base_y_matriz_eda(
+    df_eda_base, ventas_24m, columnas_venta_24m = preparar_base_y_matriz_eda(
         df=df,
-        meses_historico=MESES_HISTORICO_EDA,
-        columnas_contexto=COLUMNAS_CONTEXTO_EDA,
+        meses_historico=meses_historico,
+        columna_filtro=columna_filtro,
+        valor_filtro=valor_filtro,
+        columnas_contexto=columnas_contexto,
         incluir_columnas_venta_en_df_eda=True,
         ignorar_columnas_faltantes=True
     )
@@ -146,24 +181,25 @@ def ejecutar_validacion_preparacion_base_matriz(
     print("Preparación ejecutada correctamente ✅")
 
     # ============================================================
-    # 3. Validar resultados
+    # 3. Validar resultados despues de la preparación
     # ============================================================
 
-    validar_salida_preparacion_eda(
-        df_eda=df_eda,
+    validar_salida_matriz_eda(
+        df_eda=df_eda_base,
         ventas_24m=ventas_24m,
-        columnas_venta_24m=columnas_venta_24m
+        columnas_venta_24m=columnas_venta_24m,
+        columna_id=columna_id
     )
 
     print("Validación estructural correcta ✅")
 
     # ============================================================
-    # 4. Mostrar resumen
+    #  Mostrar resumen
     # ============================================================
 
     print("\nResumen df_eda:")
-    print("Filas df_eda:", df_eda.shape[0])
-    print("Columnas df_eda:", df_eda.shape[1])
+    print("Filas df_eda:", df_eda_base.shape[0])
+    print("Columnas df_eda:", df_eda_base.shape[1])
 
     print("\nResumen matriz ventas_24m:")
     print("Filas ventas_24m:", ventas_24m.shape[0])
@@ -175,9 +211,24 @@ def ejecutar_validacion_preparacion_base_matriz(
     print("Última columna:", columnas_venta_24m[-1])
 
     print("\nPrimeras columnas de df_eda:")
-    print(df_eda.columns.tolist()[:20])
+    print(df_eda_base.columns.tolist()[:30])
+
+    print("\nColumnas de contexto solicitadas que sí quedaron en df_eda:")
+    columnas_contexto_presentes = [
+        columna for columna in columnas_contexto
+        if columna in df_eda_base.columns
+    ]
+    print(columnas_contexto_presentes)
+
+    print("\nColumnas de contexto solicitadas que no existen en df_eda:")
+    columnas_contexto_faltantes = [
+        columna for columna in columnas_contexto
+        if columna not in df_eda_base.columns
+    ]
+    print(columnas_contexto_faltantes)
 
     print("\nVista rápida df_eda:")
+
     columnas_vista = [
         columna for columna in [
             "codigo_articulo",
@@ -188,55 +239,121 @@ def ejecutar_validacion_preparacion_base_matriz(
             "segmento_forecast",
             "aplica_forecast_automatico"
         ]
-        if columna in df_eda.columns
+        if columna in df_eda_base.columns
     ]
 
-    print(df_eda[columnas_vista].head())
+    print(df_eda_base[columnas_vista].head())
 
     print("\nVista rápida ventas_24m:")
     print(ventas_24m.head())
 
-    # ============================================================
-    # 5. Exportar muestra de validación
-    # ============================================================
+    # ========================================================
+    # 3. FEATURE ENGINEERING
+    # ========================================================
 
-    if exportar_muestra:
-        ruta_muestra = (
-            RUTA_OUTPUT_EDA.parent
-            / "validacion_03_preparacion_base_matriz_eda.xlsx"
+    print("\n[2/2] Calculando variables matemáticas EDA...")
+
+    df_eda_features = agregar_feature_engineering_a_dataframe(
+        df_eda=df_eda_base,
+        ventas_24m=ventas_24m,
+        columna_id=columna_id
+    )
+
+    resumen_variables = generar_resumen_variables_eda(
+        df_eda=df_eda_features
+    )
+    df_resumen_variables = pd.DataFrame([resumen_variables])
+
+    print("Feature Engineering ejecutado correctamente ✅")
+
+    print(
+        "Cantidad de variables calculadas:",
+        resumen_variables["cantidad_variables_calculadas"]
+    )
+
+    print(
+        "Cantidad de artículos:",
+        resumen_variables["cantidad_articulos"]
+    )
+
+    
+
+    
+    # ========================================================
+    # 5. Aplicar reglas de clasificación EDA 
+    # ========================================================
+    df_eda_final = aplicar_clasificaciones_eda(df_eda=df_eda_features).copy()
+    
+
+    # ========================================================
+    # 6. EXPORTACIÓN OFICIAL
+    # ========================================================
+
+    if exportar_excel:
+
+        ruta_output.parent.mkdir(
+            parents=True,
+            exist_ok=True
         )
 
-        with pd.ExcelWriter(ruta_muestra, engine="openpyxl") as writer:
-            df_eda.head(100).to_excel(
+        df_eda_final.to_excel(
+            ruta_output,
+            index=False
+        )
+
+        print(f"\nArchivo oficial exportado: {ruta_output}")
+
+    # ========================================================
+    # 7. EXPORTACIÓN DE VALIDACIÓN
+    # ========================================================
+
+    if exportar_validacion:
+
+        ruta_validacion = (
+            ruta_output.parent
+            / "validacion_03_forecast_eda.xlsx"
+        )
+
+        with pd.ExcelWriter(
+            ruta_validacion,
+            engine="openpyxl"
+        ) as writer:
+
+            df_eda_base.to_excel(
                 writer,
-                sheet_name="muestra_df_eda",
+                sheet_name="eda_base",
                 index=False
             )
 
-            ventas_24m.head(100).to_excel(
+            ventas_24m.reset_index().to_excel(
                 writer,
-                sheet_name="muestra_ventas_24m",
+                sheet_name="matriz_ventas",
                 index=False
             )
 
-            pd.DataFrame(
-                {
-                    "columnas_venta_24m": columnas_venta_24m
-                }
-            ).to_excel(
+            df_eda_final.to_excel(
                 writer,
-                sheet_name="columnas_venta",
+                sheet_name="feature_engineering",
                 index=False
             )
 
-        print("\nMuestra de validación exportada ✅")
-        print(ruta_muestra)
+            pd.DataFrame({
+                "variable": VARIABLES_CALCULADAS_EDA,
+                "presente": [
+                    variable in df_eda_final.columns
+                    for variable in VARIABLES_CALCULADAS_EDA
+                ]
+            }).to_excel(
+                writer,
+                sheet_name="validacion_variables",
+                index=False
+            )
 
-    print("\n" + "=" * 100)
-    print("VALIDACIÓN DE PREPARACIÓN BASE Y MATRIZ FINALIZADA ✅")
-    print("=" * 100)
+        print(f"Archivo de validación: {ruta_validacion}")
 
-    return df_eda, ventas_24m, columnas_venta_24m
+    print("\nPIPELINE 03 FINALIZADO CORRECTAMENTE")
+
+    return df_eda_final, ventas_24m, columnas_venta_24m
 
 
 def main():
@@ -244,8 +361,17 @@ def main():
     Ejecuta validación inicial del pipeline 03.
     """
 
-    ejecutar_validacion_preparacion_base_matriz(
-        exportar_muestra=True
+    ejecutar_eda(
+        ruta_input=RUTA_INPUT_FORECAST_FILTER,
+        ruta_output=RUTA_OUTPUT_FORECAST_EDA,
+        columna_filtro=COLUMNA_FILTRO_SEGMENTO_FORECAST,
+        valor_filtro=VALOR_FILTRO_SEGMENTO_FORECAST,
+        columnas_contexto=COLUMNAS_CONTEXTO_EDA,
+        meses_historico=MESES_HISTORICO_EDA,
+        exportar_muestra=True,
+        columna_id="codigo_articulo",
+        exportar_excel=True,
+        exportar_validacion=True
     )
 
 

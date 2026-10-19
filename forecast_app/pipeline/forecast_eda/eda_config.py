@@ -1,4 +1,4 @@
-from pathlib import path
+from pathlib import Path
 
 #====================
 # Configuración General del Pipeline 03 -FORECAST EDA
@@ -40,7 +40,7 @@ TABLES_DIR = REPORTS_DIR / "tables" / "03_forecast_eda"
 
 NOMBRE_ARCHIVO_ENTRADA = "df_OITM_Ventas_after_forecast_filter.xlsx"
 
-RUTA_INPUT_FORECAST_FILTER = INPUT_DIR / NOMBRE_ARCHIVO_ENTRADA
+RUTA_INPUT_FORECAST_FILTER = OUTPUT_DIR / NOMBRE_ARCHIVO_ENTRADA
 
 #OUTPUT ENRIQUECIDO CON VARIABLES Y CLASIFICACIONES PARA EDA
 NOMBRE_ARCHIVO_OUTPUT = "df_OITM_Ventas_forecast_eda.xlsx"
@@ -117,10 +117,10 @@ COLUMNAS_CONTEXTO_EDA = [
     "grupo_articulo",
     "categoria",
     "subcategoria",
-    "tipo_abastecimiento",
-    "criticidad_comercial",
-    "segmento_forecast",
-    "clasificacion_alcance_inventario_24m",
+    # "tipo_abastecimiento",
+    # "criticidad_comercial",
+    # "segmento_forecast",
+    # "clasificacion_alcance_inventario_24m",
     "stock_en_mano",
     "stock_disponible_proyectado",
     "venta_estimada_24m",
@@ -260,8 +260,8 @@ METODO_CORRELACION = "pearson"
 # de estacionalidad.
 
 UMBRAL_ESTACIONALIDAD_FUERTE = 0.70
-UMBRAL_ESTACIONALIDAD_MODERADA = 0.40
-UMBRAL_ESTACIONALIDAD_DEBIL = 0.20
+UMBRAL_ESTACIONALIDAD_MODERADA = 0.50
+UMBRAL_ESTACIONALIDAD_DEBIL = 0.30
 
 ETIQUETA_ESTACIONALIDAD_FUERTE = "Estacionalidad fuerte"
 ETIQUETA_ESTACIONALIDAD_MODERADA = "Estacionalidad moderada"
@@ -375,7 +375,19 @@ COLUMNAS_CLASIFICACION_EDA = [
     "clasificacion_concentracion_picos_24m"
 ]
 
+# ============================================================
+# VARIABLES REQUERIDAS PARA CLASIFICACIÓN EDA
+# ============================================================
 
+VARIABLES_REQUERIDAS_CLASIFICACION_EDA = [
+    "meses_con_venta_24m",
+    "porcentaje_meses_sin_venta_24m",
+    "meses_desde_ultima_venta",
+    "coeficiente_variacion_venta_24m",
+    "pendiente_tendencia_24m",
+    "correlacion_estacional_12m",
+    "indice_concentracion_picos_24m"
+]
 # ============================================================
 # VARIABLES NUMÉRICAS PARA TABLAS DESCRIPTIVAS
 # ============================================================
@@ -561,7 +573,7 @@ COLUMNAS_REQUERIDAS_INPUT = [
     "cantidad_clientes_24m",
     "meses_con_venta_24m",
     "frecuencia_venta_24m_pct",
-    "ratio_venta_reciente_6m"
+    #"ratio_venta_reciente_6m"
 ]
 
 

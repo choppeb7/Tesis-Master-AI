@@ -1,293 +1,144 @@
-import re
-import unicodedata
 import numpy as np
 import pandas as pd
 
-
 from pipeline.forecast_eda.eda_config import (
-    COLUMNA_FILTRO_FORECAST_AUTOMATICO,
-    VALOR_FILTRO_FORECAST_AUTOMATICO,
-    MESES_HISTORICO_EDA,
-    COLUMNAS_REQUERIDAS_INPUT,
-    PATRONES_COLUMNAS_VENTA_MENSUAL,
     VARIABLES_CALCULADAS_EDA
 )
 
 
 # ============================================================
-# MAPEO DE MESES EN ESPAÑOL
+# VALIDACIONES
 # ============================================================
 
-MESES_ES = {
-    "enero": 1,
-    "febrero": 2,
-    "marzo": 3,
-    "abril": 4,
-    "mayo": 5,
-    "junio": 6,
-    "julio": 7,
-    "agosto": 8,
-    "septiembre": 9,
-    "setiembre": 9,
-    "octubre": 10,
-    "noviembre": 11,
-    "diciembre": 12
-}
-
-
-# ============================================================
-# FUNCIONES GENERALES DE LIMPIEZA Y VALIDACIÓN
-# ============================================================
-
-def normalizar_texto(texto):
+def validar_matriz_ventas_eda(
+    ventas_24m,
+    columna_id="codigo_articulo"
+):
     """
-    Normaliza texto:
-    - convierte a minúsculas
-    - elimina espacios
-    - elimina tildes
+    Valida que la matriz de ventas esté correctamente preparada.
 
-    Sirve para detectar columnas tipo venta_enero_2024.
+    Requisitos:
+    - No debe estar vacía.
+    - Debe tener codigo_articulo como índice.
+    - El índice debe ser único.
+    - El índice no debe tener nulos.
+    - Todas las columnas deben ser numéricas.
     """
 
-    texto = str(texto).strip().lower()
+    if ventas_24m.empty:
+        raise ValueError("La matriz ventas_24m está vacía.")
 
-    texto = "".join(
-        caracter
-        for caracter in unicodedata.normalize("NFD", texto)
-        if unicodedata.category(caracter) != "Mn"
-    )
+    if ventas_24m.index.name != columna_id:
+        raise ValueError(
+            f"La matriz ventas_24m debe tener '{columna_id}' como índice. "
+            f"Actualmente el índice se llama: {ventas_24m.index.name}"
+        )
 
-    return texto
+    if not ventas_24m.index.is_unique:
+        raise ValueError(
+            f"La matriz ventas_24m contiene códigos duplicados en el índice '{columna_id}'."
+        )
 
+    if ventas_24m.index.isna().any():
+        raise ValueError(
+            f"La matriz ventas_24m contiene valores nulos en el índice '{columna_id}'."
+        )
 
-def validar_columnas_requeridas(df, columnas_requeridas):
-    """
-    Valida que el dataframe tenga las columnas mínimas necesarias.
-    """
-
-    columnas_faltantes = [
+    columnas_no_numericas = [
         columna
-        for columna in columnas_requeridas
-        if columna not in df.columns
+        for columna in ventas_24m.columns
+        if not pd.api.types.is_numeric_dtype(ventas_24m[columna])
     ]
 
-    if columnas_faltantes:
+    if columnas_no_numericas:
         raise ValueError(
-            "Faltan columnas requeridas en el dataframe: "
-            + ", ".join(columnas_faltantes)
+            "La matriz ventas_24m contiene columnas no numéricas: "
+            + ", ".join(columnas_no_numericas)
         )
 
     return True
 
 
-def convertir_serie_a_bool(serie):
+def validar_df_eda_para_merge(
+    df_eda,
+    columna_id="codigo_articulo"
+):
     """
-    Convierte una serie que puede venir como booleano, texto o número
-    a valores booleanos.
+    Valida que df_eda pueda recibir variables EDA mediante merge.
 
-    Acepta:
-    - True / False
-    - 'true' / 'false'
-    - 'si' / 'no'
-    - 'sí' / 'no'
-    - 1 / 0
-    """
-
-    if serie.dtype == bool:
-        return serie
-
-    serie_limpia = (
-        serie
-        .fillna(False)
-        .astype(str)
-        .str.strip()
-        .str.lower()
-    )
-
-    mapa_booleano = {
-        "true": True,
-        "1": True,
-        "si": True,
-        "sí": True,
-        "yes": True,
-        "y": True,
-
-        "false": False,
-        "0": False,
-        "no": False,
-        "n": False,
-        "nan": False,
-        "none": False,
-        "": False
-    }
-
-    return serie_limpia.map(mapa_booleano).fillna(False)
-
-
-# ============================================================
-# DETECCIÓN DE COLUMNAS MENSUALES DE VENTA
-# ============================================================
-
-def extraer_fecha_desde_columna_venta(columna):
-    """
-    Extrae una fecha mensual desde nombres de columnas de venta.
-
-    Soporta dos formatos:
-
-    1. venta_2024_01
-    2. venta_enero_2024
-
-    Retorna:
-    - pd.Timestamp con el primer día del mes
-    - None si no reconoce el formato
+    Requisitos:
+    - Debe contener codigo_articulo.
+    - codigo_articulo no debe tener nulos.
+    - codigo_articulo debe ser único.
     """
 
-    columna_original = str(columna).strip()
-    columna_normalizada = normalizar_texto(columna_original)
+    if df_eda.empty:
+        raise ValueError("df_eda está vacío.")
 
-    # ------------------------------------------------------------
-    # Formato: venta_2024_01
-    # ------------------------------------------------------------
-    match_numerico = re.match(
-        r"^venta_(\d{4})_(\d{2})$",
-        columna_normalizada
-    )
-
-    if match_numerico:
-        anio = int(match_numerico.group(1))
-        mes = int(match_numerico.group(2))
-
-        if 1 <= mes <= 12:
-            return pd.Timestamp(year=anio, month=mes, day=1)
-
-    # ------------------------------------------------------------
-    # Formato: venta_enero_2024
-    # ------------------------------------------------------------
-    match_texto = re.match(
-        r"^venta_([a-zñ]+)_(\d{4})$",
-        columna_normalizada
-    )
-
-    if match_texto:
-        nombre_mes = match_texto.group(1)
-        anio = int(match_texto.group(2))
-
-        mes = MESES_ES.get(nombre_mes)
-
-        if mes is not None:
-            return pd.Timestamp(year=anio, month=mes, day=1)
-
-    return None
-
-
-def detectar_columnas_venta_mensual(df):
-    """
-    Detecta columnas mensuales de venta y las ordena cronológicamente.
-    """
-
-    columnas_detectadas = []
-
-    for columna in df.columns:
-        fecha_columna = extraer_fecha_desde_columna_venta(columna)
-
-        if fecha_columna is not None:
-            columnas_detectadas.append(
-                {
-                    "columna": columna,
-                    "fecha": fecha_columna
-                }
-            )
-
-    if not columnas_detectadas:
+    if columna_id not in df_eda.columns:
         raise ValueError(
-            "No se detectaron columnas mensuales de venta. "
-            "Se esperaba un formato como 'venta_2024_01' "
-            "o 'venta_enero_2024'."
+            f"df_eda no contiene la columna llave '{columna_id}'."
         )
 
-    df_columnas = pd.DataFrame(columnas_detectadas)
-
-    df_columnas = (
-        df_columnas
-        .sort_values("fecha")
-        .drop_duplicates(subset=["columna"])
-        .reset_index(drop=True)
-    )
-
-    return df_columnas["columna"].tolist()
-
-
-def obtener_columnas_ultimos_meses(
-    df,
-    meses=MESES_HISTORICO_EDA
-):
-    """
-    Detecta columnas de venta mensual y retorna las últimas N columnas.
-    """
-
-    columnas_venta = detectar_columnas_venta_mensual(df)
-
-    if len(columnas_venta) < meses:
-        columnas_ultimos_meses = columnas_venta
-    else:
-        columnas_ultimos_meses = columnas_venta[-meses:]
-
-    return columnas_ultimos_meses
-
-
-# ============================================================
-# FILTRO PRINCIPAL PARA EDA
-# ============================================================
-
-def filtrar_articulos_forecast_automatico(
-    df,
-    columna_filtro=COLUMNA_FILTRO_FORECAST_AUTOMATICO,
-    valor_filtro=VALOR_FILTRO_FORECAST_AUTOMATICO
-):
-    """
-    Filtra únicamente los artículos aplicables a forecast automático.
-    """
-
-    if columna_filtro not in df.columns:
+    if df_eda[columna_id].isna().any():
         raise ValueError(
-            f"No existe la columna de filtro '{columna_filtro}' en el dataframe."
+            f"df_eda contiene valores nulos en '{columna_id}'."
         )
 
-    df = df.copy()
+    if not df_eda[columna_id].is_unique:
+        duplicados = (
+            df_eda.loc[df_eda[columna_id].duplicated(keep=False), columna_id]
+            .drop_duplicates()
+            .head(20)
+            .tolist()
+        )
 
-    serie_bool = convertir_serie_a_bool(df[columna_filtro])
+        raise ValueError(
+            f"df_eda contiene códigos duplicados en '{columna_id}'. "
+            f"Ejemplos: {duplicados}"
+        )
 
-    df_filtrado = df[serie_bool == valor_filtro].copy()
-
-    return df_filtrado
+    return True
 
 
-# ============================================================
-# MATRIZ DE VENTAS MENSUALES
-# ============================================================
-
-def preparar_matriz_ventas_mensuales(
-    df,
-    columnas_venta,
-    convertir_negativos_a_cero=True
+def validar_alineacion_df_eda_vs_matriz(
+    df_eda,
+    ventas_24m,
+    columna_id="codigo_articulo"
 ):
     """
-    Prepara una matriz numérica de ventas mensuales.
-
-    Cada fila representa un artículo.
-    Cada columna representa un mes de venta.
+    Valida que df_eda y ventas_24m tengan los mismos artículos.
     """
 
-    ventas = (
-        df[columnas_venta]
-        .apply(pd.to_numeric, errors="coerce")
-        .fillna(0)
+    validar_df_eda_para_merge(
+        df_eda=df_eda,
+        columna_id=columna_id
     )
 
-    if convertir_negativos_a_cero:
-        ventas = ventas.clip(lower=0)
+    validar_matriz_ventas_eda(
+        ventas_24m=ventas_24m,
+        columna_id=columna_id
+    )
 
-    return ventas
+    codigos_df_eda = set(df_eda[columna_id].astype(str))
+    codigos_matriz = set(ventas_24m.index.astype(str))
+
+    codigos_solo_df_eda = codigos_df_eda - codigos_matriz
+    codigos_solo_matriz = codigos_matriz - codigos_df_eda
+
+    if codigos_solo_df_eda:
+        raise ValueError(
+            "Hay códigos en df_eda que no existen en ventas_24m. "
+            f"Ejemplos: {list(codigos_solo_df_eda)[:20]}"
+        )
+
+    if codigos_solo_matriz:
+        raise ValueError(
+            "Hay códigos en ventas_24m que no existen en df_eda. "
+            f"Ejemplos: {list(codigos_solo_matriz)[:20]}"
+        )
+
+    return True
 
 
 # ============================================================
@@ -297,6 +148,9 @@ def preparar_matriz_ventas_mensuales(
 def calcular_max_meses_consecutivos_sin_venta(fila):
     """
     Calcula la máxima racha de meses consecutivos sin venta.
+
+    Ejemplo:
+    [2, 0, 0, 3, 0, 0, 0, 1] -> 3
     """
 
     valores = np.array(fila, dtype=float)
@@ -318,8 +172,11 @@ def calcular_meses_desde_ultima_venta(fila):
     """
     Calcula cuántos meses han pasado desde la última venta.
 
-    Si el último mes tuvo venta, retorna 0.
-    Si no hubo venta en toda la ventana, retorna la longitud de la ventana.
+    Si el último mes tuvo venta:
+    retorna 0.
+
+    Si no hubo venta en toda la ventana:
+    retorna la cantidad total de meses.
     """
 
     valores = np.array(fila, dtype=float)
@@ -338,11 +195,16 @@ def calcular_meses_desde_ultima_venta(fila):
 
 def calcular_pendiente_tendencia(fila):
     """
-    Calcula la pendiente de tendencia de ventas mensuales.
+    Calcula la pendiente de tendencia de la serie mensual.
 
-    Una pendiente positiva sugiere crecimiento.
-    Una pendiente negativa sugiere decrecimiento.
-    Una pendiente cercana a cero sugiere estabilidad.
+    Valor positivo:
+    - tendencia creciente.
+
+    Valor negativo:
+    - tendencia decreciente.
+
+    Valor cercano a cero:
+    - tendencia estable.
     """
 
     valores = np.array(fila, dtype=float)
@@ -360,20 +222,23 @@ def calcular_pendiente_tendencia(fila):
     except Exception:
         pendiente = 0
 
+    if np.isnan(pendiente) or np.isinf(pendiente):
+        return 0
+
     return pendiente
 
 
 def calcular_indice_concentracion_picos_24m(fila):
     """
-    Calcula el índice de concentración de ventas en los meses de mayor demanda.
+    Calcula el índice de concentración de ventas en los meses más altos.
 
     Fórmula:
-        promedio de los 3 meses más altos / promedio mensual general
+    promedio de los 3 meses más altos / promedio mensual general.
 
     Interpretación:
-    - cercano a 1: ventas relativamente estables
-    - 1.5 a 3: concentración moderada
-    - mayor a 3: alta concentración
+    - cercano a 1: ventas distribuidas de forma más estable.
+    - entre 1.5 y 3: concentración moderada.
+    - mayor a 3: alta concentración en pocos meses.
     """
 
     valores = np.array(fila, dtype=float)
@@ -387,17 +252,24 @@ def calcular_indice_concentracion_picos_24m(fila):
 
     top_promedio = np.sort(valores)[-cantidad_top:].mean()
 
-    return top_promedio / promedio
+    resultado = top_promedio / promedio
+
+    if np.isnan(resultado) or np.isinf(resultado):
+        return 0
+
+    return resultado
 
 
 def calcular_correlacion_estacional_12m(fila):
     """
-    Calcula una señal de posible estacionalidad comparando:
+    Calcula una señal preliminar de estacionalidad.
 
+    Compara:
     - primeros 12 meses
     - siguientes 12 meses
 
-    Una correlación positiva alta sugiere repetición de patrón mensual.
+    Una correlación positiva alta indica que el patrón mensual
+    del segundo año se parece al patrón mensual del primer año.
     """
 
     valores = np.array(fila, dtype=float)
@@ -413,7 +285,7 @@ def calcular_correlacion_estacional_12m(fila):
 
     correlacion = np.corrcoef(primer_anio, segundo_anio)[0, 1]
 
-    if np.isnan(correlacion):
+    if np.isnan(correlacion) or np.isinf(correlacion):
         return 0
 
     return correlacion
@@ -421,7 +293,10 @@ def calcular_correlacion_estacional_12m(fila):
 
 def calcular_cv_meses_con_venta(fila):
     """
-    Calcula el coeficiente de variación únicamente en meses con venta positiva.
+    Calcula el coeficiente de variación solo en los meses con venta.
+
+    Esto mide la variabilidad del tamaño de la demanda
+    cuando sí existe venta.
     """
 
     valores = np.array(fila, dtype=float)
@@ -436,24 +311,63 @@ def calcular_cv_meses_con_venta(fila):
     if promedio <= 0:
         return 0
 
-    return valores_con_venta.std() / promedio
+    resultado = valores_con_venta.std() / promedio
 
+    if np.isnan(resultado) or np.isinf(resultado):
+        return 0
+
+    return resultado
+
+def calcular_meses_con_venta_24m(fila):
+    """
+    Calcula la cantidad de meses con ventas positivas
+    durante los últimos 24 meses.
+
+    Criterio:
+    - Venta > 0: mes con venta.
+    - Venta <= 0: mes sin venta.
+
+    Ejemplo:
+    [10, 0, 5, 0, 20, 0] -> 3
+    """
+
+    valores = np.array(fila, dtype=float)
+
+    meses_con_venta = np.sum(valores > 0)
+
+    return int(meses_con_venta)
 
 # ============================================================
 # CÁLCULO DE VARIABLES MATEMÁTICAS EDA
 # ============================================================
 
 def calcular_variables_comportamiento_demanda(
-    ventas_24m
+    ventas_24m,
+    columna_id="codigo_articulo"
 ):
     """
     Calcula variables matemáticas de comportamiento de demanda
-    a partir de una matriz de ventas mensuales.
+    a partir de la matriz mensual ventas_24m.
 
-    Retorna un dataframe con las variables calculadas.
+    Entrada:
+    - ventas_24m:
+      DataFrame numérico con codigo_articulo como índice.
+
+    Salida:
+    - df_variables:
+      DataFrame con codigo_articulo como índice y variables EDA calculadas.
     """
 
+    validar_matriz_ventas_eda(
+        ventas_24m=ventas_24m,
+        columna_id=columna_id
+    )
+
     cantidad_meses = ventas_24m.shape[1]
+
+    # ============================================================
+    # Variables de distribución mensual
+    # ============================================================
 
     promedio_venta_24m = ventas_24m.mean(axis=1)
     desviacion_std_venta_24m = ventas_24m.std(axis=1)
@@ -472,9 +386,9 @@ def calcular_variables_comportamiento_demanda(
         0
     )
 
-    # ------------------------------------------------------------
-    # Picos de demanda
-    # ------------------------------------------------------------
+    # ============================================================
+    # Variables de picos y concentración
+    # ============================================================
 
     umbral_pico = promedio_venta_24m + desviacion_std_venta_24m
 
@@ -494,9 +408,9 @@ def calcular_variables_comportamiento_demanda(
         axis=1
     )
 
-    # ------------------------------------------------------------
-    # Intermitencia
-    # ------------------------------------------------------------
+    # ============================================================
+    # Variables de intermitencia
+    # ============================================================
 
     meses_con_venta = (ventas_24m > 0).sum(axis=1)
 
@@ -523,45 +437,54 @@ def calcular_variables_comportamiento_demanda(
         axis=1
     )
 
-    # ------------------------------------------------------------
-    # Recencia
-    # ------------------------------------------------------------
+    # ============================================================
+    # Variables de recencia
+    # ============================================================
 
     meses_desde_ultima_venta = ventas_24m.apply(
         calcular_meses_desde_ultima_venta,
         axis=1
     )
 
-    # ------------------------------------------------------------
-    # Tendencia
-    # ------------------------------------------------------------
+    # ============================================================
+    # Variables de tendencia
+    # ============================================================
 
     pendiente_tendencia_24m = ventas_24m.apply(
         calcular_pendiente_tendencia,
         axis=1
     )
 
-    # ------------------------------------------------------------
-    # Estacionalidad
-    # ------------------------------------------------------------
+    # ============================================================
+    # meses con venta
+
+    # ============================================================
+    meses_con_venta_24m = ventas_24m.apply(
+        calcular_meses_con_venta_24m,
+        axis=1
+    )
+    # ============================================================
+    # Variables de estacionalidad
+    # ============================================================
 
     correlacion_estacional_12m = ventas_24m.apply(
         calcular_correlacion_estacional_12m,
         axis=1
     )
 
-    # ------------------------------------------------------------
+
+    # ============================================================
     # Variabilidad en meses activos
-    # ------------------------------------------------------------
+    # ============================================================
 
     cv_meses_con_venta_24m = ventas_24m.apply(
         calcular_cv_meses_con_venta,
         axis=1
     )
 
-    # ------------------------------------------------------------
-    # Construir dataframe de variables calculadas
-    # ------------------------------------------------------------
+    # ============================================================
+    # Construcción del DataFrame de variables
+    # ============================================================
 
     df_variables = pd.DataFrame(
         {
@@ -580,10 +503,13 @@ def calcular_variables_comportamiento_demanda(
             "meses_desde_ultima_venta": meses_desde_ultima_venta,
             "pendiente_tendencia_24m": pendiente_tendencia_24m,
             "correlacion_estacional_12m": correlacion_estacional_12m,
-            "cv_meses_con_venta_24m": cv_meses_con_venta_24m
+            "cv_meses_con_venta_24m": cv_meses_con_venta_24m,
+            "meses_con_venta_24m": meses_con_venta_24m
         },
         index=ventas_24m.index
     )
+
+    df_variables.index.name = columna_id
 
     df_variables = (
         df_variables
@@ -594,126 +520,162 @@ def calcular_variables_comportamiento_demanda(
     return df_variables
 
 
-def agregar_variables_comportamiento_demanda(
-    df,
-    columnas_venta_24m=None,
-    meses_historico=MESES_HISTORICO_EDA,
-    convertir_negativos_a_cero=True
+
+# ============================================================
+# UNIÓN DE VARIABLES EDA AL DATAFRAME BASE
+# ============================================================
+
+def agregar_feature_engineering_a_dataframe(
+    df_eda,
+    ventas_24m,
+    columna_id="codigo_articulo"
 ):
     """
-    Agrega al dataframe las variables matemáticas de comportamiento de demanda.
+    Agrega las variables matemáticas EDA a df_eda usando codigo_articulo
+    como llave primaria.
+
+    No usa concat por posición.
+    Usa merge one_to_one para evitar desalineaciones.
     """
 
-    df = df.copy()
-
-    if columnas_venta_24m is None:
-        columnas_venta_24m = obtener_columnas_ultimos_meses(
-            df=df,
-            meses=meses_historico
-        )
-
-    ventas_24m = preparar_matriz_ventas_mensuales(
-        df=df,
-        columnas_venta=columnas_venta_24m,
-        convertir_negativos_a_cero=convertir_negativos_a_cero
+    validar_alineacion_df_eda_vs_matriz(
+        df_eda=df_eda,
+        ventas_24m=ventas_24m,
+        columna_id=columna_id
     )
+
+    df_eda = df_eda.copy()
 
     df_variables = calcular_variables_comportamiento_demanda(
-        ventas_24m=ventas_24m
+        ventas_24m=ventas_24m,
+        columna_id=columna_id
     )
 
-    # Eliminar variables si ya existían para evitar duplicados
-    columnas_a_eliminar = [
+    df_variables = df_variables.reset_index()
+
+    # ------------------------------------------------------------
+    # Eliminar variables existentes para evitar duplicados
+    # ------------------------------------------------------------
+
+    columnas_existentes = [
         columna
         for columna in VARIABLES_CALCULADAS_EDA
-        if columna in df.columns
+        if columna in df_eda.columns
     ]
 
-    if columnas_a_eliminar:
-        df = df.drop(columns=columnas_a_eliminar)
+    if columnas_existentes:
+        df_eda = df_eda.drop(columns=columnas_existentes)
 
-    df = pd.concat(
-        [
-            df,
-            df_variables
-        ],
-        axis=1
-    )
+    # ------------------------------------------------------------
+    # Validar que todos los códigos tengan variables calculadas
+    # ------------------------------------------------------------
 
-    return df, columnas_venta_24m
+    codigos_df_eda = set(df_eda[columna_id].astype(str))
+    codigos_variables = set(df_variables[columna_id].astype(str))
 
+    codigos_sin_variables = codigos_df_eda - codigos_variables
 
-# ============================================================
-# FUNCIÓN PRINCIPAL DEL FEATURE ENGINEERING EDA
-# ============================================================
-
-def preparar_dataframe_eda_base(
-    df,
-    columna_filtro=COLUMNA_FILTRO_FORECAST_AUTOMATICO,
-    valor_filtro=VALOR_FILTRO_FORECAST_AUTOMATICO,
-    meses_historico=MESES_HISTORICO_EDA,
-    convertir_negativos_a_cero=True
-):
-    """
-    Prepara el dataframe base del pipeline 03 EDA.
-
-    Flujo:
-    1. Valida columnas mínimas.
-    2. Filtra artículos aplicables a forecast automático.
-    3. Detecta columnas mensuales de venta.
-    4. Calcula variables matemáticas de demanda.
-    """
-
-    validar_columnas_requeridas(
-        df=df,
-        columnas_requeridas=COLUMNAS_REQUERIDAS_INPUT
-    )
-
-    df_eda = filtrar_articulos_forecast_automatico(
-        df=df,
-        columna_filtro=columna_filtro,
-        valor_filtro=valor_filtro
-    )
-
-    if df_eda.empty:
+    if codigos_sin_variables:
         raise ValueError(
-            "Después de filtrar artículos aplicables a forecast automático, "
-            "el dataframe quedó vacío."
+            "Hay artículos en df_eda sin variables calculadas. "
+            f"Ejemplos: {list(codigos_sin_variables)[:20]}"
         )
 
-    df_eda, columnas_venta_24m = agregar_variables_comportamiento_demanda(
-        df=df_eda,
-        columnas_venta_24m=None,
-        meses_historico=meses_historico,
-        convertir_negativos_a_cero=convertir_negativos_a_cero
+    # ------------------------------------------------------------
+    # Merge seguro por llave primaria
+    # ------------------------------------------------------------
+
+    df_eda_enriquecido = df_eda.merge(
+        df_variables,
+        on=columna_id,
+        how="left",
+        validate="one_to_one"
     )
 
-    return df_eda, columnas_venta_24m
+    # ------------------------------------------------------------
+    # Validar resultado final
+    # ------------------------------------------------------------
+
+    if df_eda_enriquecido.shape[0] != df_eda.shape[0]:
+        raise ValueError(
+            "El merge modificó la cantidad de filas del dataframe EDA."
+        )
+
+    variables_faltantes = [
+        variable
+        for variable in VARIABLES_CALCULADAS_EDA
+        if variable not in df_eda_enriquecido.columns
+    ]
+
+    if variables_faltantes:
+        raise ValueError(
+            "No se agregaron correctamente las siguientes variables EDA: "
+            + ", ".join(variables_faltantes)
+        )
+
+    return df_eda_enriquecido
 
 
 # ============================================================
-# RESUMEN DE VALIDACIÓN
+# RESÚMENES DE VALIDACIÓN
 # ============================================================
 
-def generar_resumen_feature_engineering(
+def generar_resumen_variables_eda(
     df_eda,
-    columnas_venta_24m
+    columna_id="codigo_articulo"
 ):
     """
-    Genera un resumen simple para validar la salida del feature engineering.
+    Genera un resumen rápido de las variables EDA calculadas.
     """
 
+    variables_presentes = [
+        variable
+        for variable in VARIABLES_CALCULADAS_EDA
+        if variable in df_eda.columns
+    ]
+
+    variables_faltantes = [
+        variable
+        for variable in VARIABLES_CALCULADAS_EDA
+        if variable not in df_eda.columns
+    ]
+
     resumen = {
-        "cantidad_articulos_eda": df_eda.shape[0],
-        "cantidad_columnas_eda": df_eda.shape[1],
-        "cantidad_columnas_venta_24m": len(columnas_venta_24m),
-        "primera_columna_venta": columnas_venta_24m[0] if columnas_venta_24m else None,
-        "ultima_columna_venta": columnas_venta_24m[-1] if columnas_venta_24m else None,
-        "variables_calculadas_presentes": [
-            variable
-            for variable in VARIABLES_CALCULADAS_EDA
-            if variable in df_eda.columns
-        ]
+        "cantidad_articulos": df_eda.shape[0],
+        "cantidad_columnas": df_eda.shape[1],
+        "columna_id": columna_id,
+        "columna_id_presente": columna_id in df_eda.columns,
+        "columna_id_unica": df_eda[columna_id].is_unique if columna_id in df_eda.columns else False,
+        "cantidad_variables_calculadas": len(variables_presentes),
+        "variables_calculadas_presentes": variables_presentes,
+        "variables_calculadas_faltantes": variables_faltantes
     }
 
     return resumen
+
+
+def generar_descriptivos_variables_eda(df_eda):
+    """
+    Genera una tabla descriptiva de las variables EDA calculadas.
+    """
+
+    variables_presentes = [
+        variable
+        for variable in VARIABLES_CALCULADAS_EDA
+        if variable in df_eda.columns
+    ]
+
+    if not variables_presentes:
+        raise ValueError(
+            "No hay variables EDA calculadas presentes para generar descriptivos."
+        )
+
+    descriptivos = (
+        df_eda[variables_presentes]
+        .describe()
+        .T
+        .reset_index()
+        .rename(columns={"index": "variable"})
+    )
+
+    return descriptivos

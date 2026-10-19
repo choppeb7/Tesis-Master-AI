@@ -130,11 +130,20 @@ def guardar_grafico_barras_conteo(
     ax.set_title(titulo)
     ax.set_xlabel(columna)
     ax.set_ylabel("Cantidad de artículos")
-    ax.set_xticklabels(df_resumen[columna], rotation=45, ha="right")
+    # Rotar las etiquetas del eje X correctamente
+    ax.tick_params(
+    axis="x",
+    labelrotation=rotacion_xticks
+    )
+
+    for etiqueta in ax.get_xticklabels():
+        etiqueta.set_ha("right")
+
     ax.grid(axis="y", alpha=0.3)
 
     plt.tight_layout()
     plt.savefig(ruta_salida, dpi=500, bbox_inches="tight")
+    print(f"Gráfico de barras exportado correctamente ✅ Ruta: {ruta_salida}")
     plt.close()
 
     return ruta_salida
@@ -228,6 +237,7 @@ def guardar_grafico_pastel_conteo(
 
     plt.tight_layout()
     plt.savefig(ruta_salida, dpi=500, bbox_inches="tight")
+    print(f"Gráfico de pastel exportado correctamente ✅ Ruta: {ruta_salida}")
     plt.close()
 # 
 
