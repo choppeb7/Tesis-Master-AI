@@ -2,7 +2,7 @@ from pathlib import Path
 import re
 import pandas as pd
 import matplotlib.pyplot as plt
-
+import numpy as np
 
 def limpiar_nombre_archivo(texto):
     """
@@ -26,7 +26,15 @@ def asegurar_directorio(ruta):
 
     return ruta
 
-
+def _serie_numerica_valida(df, columna):
+    """Obtiene valores numéricos finitos sin modificar el DataFrame original."""
+    if columna not in df.columns:
+        raise ValueError(f"No existe la columna '{columna}'.")
+    datos = pd.to_numeric(df[columna], errors="coerce")
+    datos = datos.replace([np.inf, -np.inf], np.nan).dropna()
+    if datos.empty:
+        raise ValueError(f"La columna '{columna}' no tiene datos numéricos válidos.")
+    return datos
 
 
 def preparar_resumen_conteo(df, columna, top_n=None):
@@ -54,6 +62,155 @@ def preparar_resumen_conteo(df, columna, top_n=None):
     ).round(2)
 
     return df_resumen
+
+def guardar_grafico_histograma(
+    df, 
+    columna, 
+    directorio_salida, 
+    titulo=None, 
+    nombre_archivo=None,
+    bins=30, 
+    dpi=300, 
+    figsize=(10, 6), 
+    escala_x="lineal"
+):
+    """Histograma de una variable cuantitativa; anota n y porcentaje de ceros."""
+    if titulo is None:
+        titulo = f"Distribución de {columna}"
+
+    if nombre_archivo is None:
+        nombre_archivo = f"hist_{limpiar_nombre_archivo(columna)}.png"
+
+    valores = _serie_numerica_valida(df, columna)
+    directorio_salida = asegurar_directorio(directorio_salida)
+    
+    ruta_salida = directorio_salida / nombre_archivo
+
+    fig, ax = plt.subplots(figsize=figsize)
+    try:
+        ax.hist(valores.to_numpy(), bins=bins, edgecolor="white")
+        ax.set_title(titulo or f"Distribución de {columna}")
+        ax.set_xlabel(columna)
+        ax.set_ylabel("Cantidad de artículos")
+        ax.grid(axis="y", alpha=0.25)
+        if escala_x == "symlog":
+            ax.set_xscale("symlog", linthresh=1)
+        elif escala_x != "lineal":
+            raise ValueError("escala_x debe ser 'lineal' o 'symlog'.")
+        ceros = int((valores == 0).sum())
+        ax.text(
+            0.98, 0.96,
+            f"n = {len(valores):,}\nCeros = {100 * ceros / len(valores):.1f}%",
+            transform=ax.transAxes, ha="right", va="top",
+            bbox={"facecolor": "white", "alpha": 0.85, "edgecolor": "lightgray"},
+        )
+        fig.tight_layout()
+        fig.savefig(ruta_salida, dpi=dpi, bbox_inches="tight")
+    finally:
+        plt.close(fig)
+    return ruta_salida
+
+def guardar_grafico_boxplot(
+    df, 
+    columna, 
+    directorio_salida, 
+    titulo=None, 
+    nombre_archivo=None,
+    dpi=300, 
+    figsize=(10, 3.5), 
+    escala_x="lineal"
+):
+    """Boxplot horizontal con puntos fuera de los bigotes IQR × 1.5."""
+    
+    if titulo is None:
+        titulo = f"Distribución de {columna}"
+
+    if nombre_archivo is None:
+        nombre_archivo = f"box_{limpiar_nombre_archivo(columna)}.png"
+
+    valores = _serie_numerica_valida(df, columna)
+    directorio_salida = asegurar_directorio(directorio_salida)
+    
+    ruta_salida = directorio_salida / nombre_archivo
+    fig, ax = plt.subplots(figsize=figsize)
+
+    try:
+        ax.boxplot(valores.to_numpy(), vert=False, showfliers=True, whis=1.5)
+        ax.set_title(titulo or f"Boxplot de {columna}")
+        ax.set_xlabel(columna)
+        ax.grid(axis="x", alpha=0.25)
+        ax.set_yticks([])
+        if escala_x == "symlog":
+            ax.set_xscale("symlog", linthresh=1)
+        elif escala_x != "lineal":
+            raise ValueError("escala_x debe ser 'lineal' o 'symlog'.")
+        fig.tight_layout()
+        fig.savefig(ruta_salida, dpi=dpi, bbox_inches="tight")
+    finally:
+        plt.close(fig)
+    return ruta_salida
+
+def guardar_grafico_dispersion_variables(
+    df, 
+    columna_x, 
+    columna_y, 
+    directorio_salida,
+    titulo=None, 
+    nombre_archivo=None, 
+    dpi=300,
+    figsize=(9, 6), 
+    escala_x="lineal", 
+    escala_y="lineal"
+):
+    """Dispersión de dos columnas numéricas con Spearman calculado por pares."""
+
+    if titulo is None:
+        titulo = f"Dispersión de {columna_x} vs. {columna_y}"
+
+    if nombre_archivo is None:
+        nombre_archivo = f"scatter_{limpiar_nombre_archivo(columna_x)}_vs_{limpiar_nombre_archivo(columna_y)}.png"
+
+    for columna in (columna_x, columna_y):
+        if columna not in df.columns:
+            raise ValueError(f"No existe la columna '{columna}'.")
+    pares = pd.DataFrame({
+        "x": pd.to_numeric(df[columna_x], errors="coerce"),
+        "y": pd.to_numeric(df[columna_y], errors="coerce"),
+    }).replace([np.inf, -np.inf], np.nan).dropna()
+    if pares.empty:
+        raise ValueError("No hay observaciones válidas para la dispersión.")
+    directorio_salida = asegurar_directorio(directorio_salida)
+    nombre_archivo = nombre_archivo or (
+        f"scatter_{limpiar_nombre_archivo(columna_x)}"
+        f"_vs_{limpiar_nombre_archivo(columna_y)}.png"
+    )
+    ruta_salida = directorio_salida / nombre_archivo
+
+    rho = pares["x"].corr(pares["y"], method="spearman")#Coeficiente de correlación de Spearman
+
+    texto_rho = f"{rho:.3f}" if pd.notna(rho) else "no definida"
+    fig, ax = plt.subplots(figsize=figsize)
+    try:
+        ax.scatter(pares["x"], pares["y"], alpha=0.45, s=14)
+        ax.set_title(titulo or f"{columna_y} vs. {columna_x}")
+        ax.set_xlabel(columna_x)
+        ax.set_ylabel(columna_y)
+        ax.grid(alpha=0.2)
+        for eje, escala in (("x", escala_x), ("y", escala_y)):
+            if escala == "symlog":
+                getattr(ax, f"set_{eje}scale")("symlog", linthresh=1)
+            elif escala != "lineal":
+                raise ValueError("Las escalas deben ser 'lineal' o 'symlog'.")
+        ax.text(
+            0.02, 0.98, f"n = {len(pares):,}\nSpearman ρ = {texto_rho}",
+            transform=ax.transAxes, va="top",
+            bbox={"facecolor": "white", "alpha": 0.85, "edgecolor": "lightgray"},
+        )
+        fig.tight_layout()
+        fig.savefig(ruta_salida, dpi=dpi, bbox_inches="tight")
+    finally:
+        plt.close(fig)
+    return ruta_salida
 
 
 def guardar_grafico_barras_conteo(

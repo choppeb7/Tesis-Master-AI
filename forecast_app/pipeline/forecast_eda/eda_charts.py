@@ -3,11 +3,14 @@ import sys
 from pipeline.forecast_eda import eda_config as cfg
 
 from utils.reporting import (
+    guardar_grafico_histograma,
+    guardar_grafico_boxplot,
+    guardar_grafico_dispersion_variables,
     guardar_grafico_barras_conteo,
-    guardar_grafico_pastel_conteo
+    guardar_grafico_pastel_conteo,
 )
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 FORECAST_APP_DIR = PROJECT_ROOT / "forecast_app"
 
 if str(FORECAST_APP_DIR) not in sys.path:
@@ -40,8 +43,12 @@ def generar_graficos_clasificaciones_eda(
     directorio_salida=None,
     directorio_figuras=None,
     directorio_tablas=None,
+    incluir_variables_base=True,
     generar_barras=True,
-    generar_pasteles=True
+    generar_pasteles=True,
+    generar_histogramas=True,
+    generar_boxplots=True,
+    generar_dispersion=True,
 ):
     """
     Genera gráficos para las clasificaciones del Pipeline 03.
@@ -63,6 +70,64 @@ def generar_graficos_clasificaciones_eda(
     directorio_figuras = Path(directorio_figuras)
     directorio_tablas = Path(directorio_tablas)
 
+    #======================================================================================
+    #Generar histogramas y boxplots para variables calculadas y base de demanda
+    #======================================================================================
+
+    if df_eda.empty:
+        raise ValueError("El DataFrame de EDA está vacío. No se pueden generar gráficos.")  
+
+    if incluir_variables_base:
+        candidatas_eda = list(dict.fromkeys(
+            list(cfg.COLUMNAS_CLASIFICACION_EDA) + cfg.VARIABLES_BASE_DEMANDA
+        ))
+
+    resultados = {
+        "histogramas": [], "boxplots": [], "dispersion": [],
+        "Distribución de barras": [], "Distribución de pasteles": []
+    }
+
+    for variable in candidatas_eda:
+        if generar_histogramas:
+            ruta_hist = guardar_grafico_histograma(
+                df=df_eda,
+                columna=variable,
+                directorio_salida=directorio_figuras,
+                titulo=f"Histograma de {variable}",
+                bins=30
+            )
+            resultados["histogramas"].append(ruta_hist)
+
+        if generar_boxplots:
+            ruta_box = guardar_grafico_boxplot(
+                df=df_eda,
+                columna=variable,
+                directorio_salida=directorio_figuras,
+                titulo=f"Boxplot de {variable}"
+            )
+            resultados["boxplots"].append(ruta_box)
+
+ 
+    pares=cfg.PARES_DISPERSION_EXPLORATORIO_EDA
+    if generar_dispersion:
+        for x, y in pares:
+            ruta_disp = guardar_grafico_dispersion_variables(
+                df=df_eda,
+                columna_x=x,
+                columna_y=y,
+                directorio_salida=directorio_figuras,
+                titulo=f"Dispersión de {x} vs. {y}"
+            )
+            resultados["dispersion"].append(ruta_disp)
+
+    for variable in df_eda.columns:
+        if variable not in df_eda.columns:
+            print(f"Advertencia: La columna '{variable}' no está presente en el DataFrame de EDA.")
+
+    #======================================================================
+    #Generar diagramas de barras y pasteles para clasificaciones
+    #=======================================================================
+
     columnas_faltantes = [
         columna
         for columna in cfg.COLUMNAS_CLASIFICACION_EDA
@@ -75,7 +140,6 @@ def generar_graficos_clasificaciones_eda(
             f"{columnas_faltantes}"
         )
 
-    rutas_generadas = []
 
     for columna in cfg.COLUMNAS_CLASIFICACION_EDA:
 
@@ -97,7 +161,7 @@ def generar_graficos_clasificaciones_eda(
                 rotacion_xticks=45
             )
 
-            rutas_generadas.append(ruta)
+            resultados["Distribución de barras"].append(ruta)
 
         if generar_pasteles:
 
@@ -109,6 +173,6 @@ def generar_graficos_clasificaciones_eda(
                 mostrar_leyenda=True
             )
 
-            rutas_generadas.append(ruta)
+            resultados["Distribución de pasteles"].append(ruta)
 
-    return rutas_generadas
+    return resultados

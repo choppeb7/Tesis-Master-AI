@@ -35,8 +35,15 @@ def main():
 
     rutas_graficos = generar_graficos_clasificaciones_eda(
         df_eda=df_eda_final,
+        directorio_salida=None,
+        directorio_figuras=None,
+        directorio_tablas=None,
+        incluir_variables_base=True,
         generar_barras=True,
-        generar_pasteles=True
+        generar_pasteles=True,
+        generar_histogramas=True,
+        generar_boxplots=True,
+        generar_dispersion=True,
     )
 
     print("\nGráficos generados:")

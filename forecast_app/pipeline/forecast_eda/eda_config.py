@@ -180,6 +180,20 @@ VARIABLES_CALCULADAS_EDA = [
     "cv_meses_con_venta_24m"
 ]
 
+# ============================================================
+# PARES DE VARIABLES CANDIDATAS PARA ANÁLISIS DE DISPERSIÓN
+# ============================================================
+
+PARES_DISPERSION_EXPLORATORIO_EDA = [
+    ("adi_24m", "cv_meses_con_venta_24m"),
+    ("meses_con_venta_24m", "coeficiente_variacion_venta_24m"),
+    ("venta_promedio_mensual_24m", "desviacion_std_venta_24m"),
+    ("ratio_venta_reciente_6m", "pendiente_tendencia_24m"),
+    ("meses_desde_ultima_venta", "max_meses_consecutivos_sin_venta"),
+    ("cantidad_meses_pico_24m", "indice_concentracion_picos_24m"),
+    ("total_unidades_vendidas_24m", "cantidad_clientes_24m"),
+    ("correlacion_estacional_12m", "coeficiente_variacion_venta_24m"),
+]
 
 # ============================================================
 # VARIABLES CANDIDATAS PARA ANÁLISIS Y CLUSTERIZACIÓN
