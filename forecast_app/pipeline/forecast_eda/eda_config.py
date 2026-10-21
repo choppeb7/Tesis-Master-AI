@@ -108,8 +108,8 @@ VARIABLES_BASE_DEMANDA = [
     "cantidad_clientes_24m",
     "meses_con_venta_24m",
     "frecuencia_venta_24m_pct",
-    "venta_promedio_reciente_last_6m",
-    "ratio_venta_reciente_6m"
+    #"venta_promedio_reciente_last_6m",
+    #"ratio_venta_reciente_6m"
 ]
 
 COLUMNAS_CONTEXTO_EDA = [
@@ -123,8 +123,8 @@ COLUMNAS_CONTEXTO_EDA = [
     # "clasificacion_alcance_inventario_24m",
     "stock_en_mano",
     "stock_disponible_proyectado",
-    "venta_estimada_24m",
-    "precio_referencia"
+    "precio_referencia",
+    *VARIABLES_BASE_DEMANDA,
 ]
 
 # ============================================================
@@ -177,7 +177,13 @@ VARIABLES_CALCULADAS_EDA = [
     # ------------------------------------------------------------
     # Variabilidad solo en meses con venta
     # ------------------------------------------------------------
-    "cv_meses_con_venta_24m"
+    "cv_meses_con_venta_24m",
+
+    # ------------------------------------------------------------
+    # Venta reciente y ratio de venta reciente
+    # ------------------------------------------------------------
+    "venta_promedio_reciente_last_6m",
+    "ratio_venta_reciente_6m"
 ]
 
 # ============================================================

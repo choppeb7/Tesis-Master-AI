@@ -78,9 +78,11 @@ def generar_graficos_clasificaciones_eda(
         raise ValueError("El DataFrame de EDA está vacío. No se pueden generar gráficos.")  
 
     if incluir_variables_base:
-        candidatas_eda = list(dict.fromkeys(
-            list(cfg.COLUMNAS_CLASIFICACION_EDA) + cfg.VARIABLES_BASE_DEMANDA
-        ))
+        candidatas_eda = list(dict.fromkeys(cfg.VARIABLES_BASE_DEMANDA + cfg.VARIABLES_CALCULADAS_EDA))
+            
+            
+        #list(dict.fromkeys( #+ cfg.VARIABLES_BASE_DEMANDA#))
+        
 
     resultados = {
         "histogramas": [], "boxplots": [], "dispersion": [],

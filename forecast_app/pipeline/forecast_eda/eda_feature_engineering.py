@@ -337,6 +337,45 @@ def calcular_meses_con_venta_24m(fila):
 
     return int(meses_con_venta)
 
+def calcular_venta_promedio_reciente_last_6m(fila):
+    """
+    Calcula el promedio de ventas de los últimos 6 meses.
+    """
+
+    valores = np.array(fila, dtype=float)
+
+    if len(valores) < 6:
+        return 0
+
+    ultimos_6m = valores[-6:]
+    promedio = np.nanmean(ultimos_6m)
+
+    if np.isnan(promedio) or np.isinf(promedio):
+        return 0
+
+    return promedio
+
+def calcular_ratio_venta_reciente_6m(fila):
+    """
+    Calcula el ratio de ventas de los últimos 6 meses respecto al promedio de venta en 24 meses.
+    """
+
+    valores = np.array(fila, dtype=float)
+
+    if len(valores) < 6:
+        return 0
+
+    ultimos_6m = valores[-6:]
+    promedio_6m = np.nanmean(ultimos_6m)
+
+    promedio_24m = np.nanmean(valores)
+
+
+    if np.isnan(promedio_6m) or np.isinf(promedio_6m):
+        return 0
+
+    return promedio_6m / promedio_24m if promedio_24m > 0 else 0
+
 # ============================================================
 # CÁLCULO DE VARIABLES MATEMÁTICAS EDA
 # ============================================================
@@ -483,6 +522,20 @@ def calcular_variables_comportamiento_demanda(
     )
 
     # ============================================================
+    # Variables de comportamiento reciente
+    # ============================================================
+
+    venta_promedio_reciente_last_6m = ventas_24m.apply(
+    calcular_venta_promedio_reciente_last_6m,
+    axis=1
+    )
+
+    ratio_venta_reciente_6m = ventas_24m.apply(
+    calcular_ratio_venta_reciente_6m,
+    axis=1
+    )
+
+    # ============================================================
     # Construcción del DataFrame de variables
     # ============================================================
 
@@ -504,7 +557,8 @@ def calcular_variables_comportamiento_demanda(
             "pendiente_tendencia_24m": pendiente_tendencia_24m,
             "correlacion_estacional_12m": correlacion_estacional_12m,
             "cv_meses_con_venta_24m": cv_meses_con_venta_24m,
-            "meses_con_venta_24m": meses_con_venta_24m
+            "venta_promedio_reciente_last_6m": venta_promedio_reciente_last_6m,
+            "ratio_venta_reciente_6m": ratio_venta_reciente_6m,
         },
         index=ventas_24m.index
     )
