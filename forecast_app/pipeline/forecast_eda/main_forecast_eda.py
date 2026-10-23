@@ -25,11 +25,15 @@ from pipeline.forecast_eda.eda_feature_engineering import (
 from pipeline.forecast_eda.eda_config import (
     RUTA_INPUT_FORECAST_FILTER,
     RUTA_OUTPUT_FORECAST_EDA,
+    REPORTS_DIR,
     COLUMNAS_CONTEXTO_EDA,
     MESES_HISTORICO_EDA,
     COLUMNA_FILTRO_SEGMENTO_FORECAST,
     VALOR_FILTRO_SEGMENTO_FORECAST,
-    VARIABLES_CALCULADAS_EDA
+    VARIABLES_CALCULADAS_EDA,
+    VARIABLES_CLUSTER_CANDIDATAS,
+    UMBRAL_CORRELACION_INICIAL,
+    METODO_CORRELACION,
 )
 
 from pipeline.forecast_eda.eda_matrix_preparation import (
@@ -43,7 +47,13 @@ from pipeline.forecast_eda.eda_classification_rules import (
     generar_resumen_clasificaciones_por_columna
 )
 
+from pipeline.forecast_eda.eda_correlation import (
+    analizar_correlaciones_eda
+)
 
+from pipeline.forecast_eda.eda_tables import (
+    exportar_dataset_cluster_ready
+)
 # ============================================================
 # VALIDACIÓN DE MATRIZ POR CÓDIGO DE ARTÍCULO
 # ============================================================
@@ -104,7 +114,7 @@ def ejecutar_eda(
     exportar_muestra=True,
     columna_id="codigo_articulo",
     exportar_excel=True,
-    exportar_validacion=True
+    exportar_validacion=True,
 ):
     """
     Ejecuta una validación inicial del pipeline 03.
@@ -276,7 +286,54 @@ def ejecutar_eda(
         resumen_variables["cantidad_articulos"]
     )
 
-    
+    # ============================================================
+    # 4. ANÁLISIS DE CORRELACIÓN
+    # ============================================================
+
+    print("\n[3/3] Ejecutando análisis de correlación EDA...")
+
+    # Selleccionar columnas de la matriz de ventas para correlación
+    columnas_correlacion = [
+        variable for variable in VARIABLES_CLUSTER_CANDIDATAS
+        if variable in df_eda_features.columns
+    ]
+
+    # Identificar variables faltantes
+    variables_faltantes=[
+        variable    
+        for variable in VARIABLES_CLUSTER_CANDIDATAS
+        if variable not in df_eda_features.columns
+    ]
+    if variables_faltantes:
+        print("Variables candidatas no encontradas:",
+              variables_faltantes
+              )
+
+    if len(columnas_correlacion)<2:
+        raise ValueError(
+            "Se necesitan mas variables para hacer calculo de matriz de correlación"
+        )
+
+
+    # Ejecutar análisis 
+    resultados_correlacion=analizar_correlaciones_eda(
+        df=df_eda_features,
+        variables=columnas_correlacion,
+        umbral=UMBRAL_CORRELACION_INICIAL,
+        metodo=METODO_CORRELACION,
+    )
+
+    # Extraer resultados
+    variables_seleccionadas = resultados_correlacion["seleccionadas"]
+    variables_eliminadas = resultados_correlacion["eliminadas"]
+    dimension_matriz_corr=resultados_correlacion["matriz"].shape
+
+    print("Análisis de correlación finalizado correctamente.")
+    print(f"Comprobando dimensión de matriz de correlacion: {dimension_matriz_corr} ")
+    print("Variables evaluadas:", len(columnas_correlacion))
+    print("Variables seleccionadas:", len(variables_seleccionadas))
+    print("Variables eliminadas:", len(variables_eliminadas))
+
 
     
     # ========================================================
@@ -284,72 +341,89 @@ def ejecutar_eda(
     # ========================================================
     df_eda_final = aplicar_clasificaciones_eda(df_eda=df_eda_features).copy()
     
+    # ============================================================
+    # 6. PREPARAR DATASET PARA PIPELINE 04 - CLUSTERING
+    # ============================================================
 
+    if exportar_excel:
+
+        ruta_cluster_ready = (
+        ruta_output.parent
+        / "df_OITM_Ventas_cluster_ready.xlsx"
+        )
+
+        df_cluster_input = exportar_dataset_cluster_ready(
+        df_ventas=ventas_24m,
+        df_eda_final=df_eda_final,
+        resultados_correlacion=resultados_correlacion,
+        ruta_salida=ruta_cluster_ready,
+        columna_id=columna_id
+        )
     # ========================================================
     # 6. EXPORTACIÓN OFICIAL
     # ========================================================
 
-    if exportar_excel:
+    # if exportar_excel:
 
-        ruta_output.parent.mkdir(
-            parents=True,
-            exist_ok=True
-        )
+    #     ruta_output.parent.mkdir(
+    #         parents=True,
+    #         exist_ok=True
+    #     )
 
-        df_eda_final.to_excel(
-            ruta_output,
-            index=False
-        )
+    #     df_eda_final.to_excel(
+    #         ruta_output,
+    #         index=False
+    #     )
 
-        print(f"\nArchivo oficial exportado: {ruta_output}")
+    #     print(f"\nArchivo oficial exportado: {ruta_output}")
 
-    # ========================================================
-    # 7. EXPORTACIÓN DE VALIDACIÓN
-    # ========================================================
+    # # ========================================================
+    # # 7. EXPORTACIÓN DE VALIDACIÓN
+    # # ========================================================
 
-    if exportar_validacion:
+    # if exportar_validacion:
 
-        ruta_validacion = (
-            ruta_output.parent
-            / "validacion_03_forecast_eda.xlsx"
-        )
+    #     ruta_validacion = (
+    #         ruta_output.parent
+    #         / "validacion_03_forecast_eda.xlsx"
+    #     )
 
-        with pd.ExcelWriter(
-            ruta_validacion,
-            engine="openpyxl"
-        ) as writer:
+    #     with pd.ExcelWriter(
+    #         ruta_validacion,
+    #         engine="openpyxl"
+    #     ) as writer:
 
-            df_eda_base.to_excel(
-                writer,
-                sheet_name="eda_base",
-                index=False
-            )
+    #         df_eda_base.to_excel(
+    #             writer,
+    #             sheet_name="eda_base",
+    #             index=False
+    #         )
 
-            ventas_24m.reset_index().to_excel(
-                writer,
-                sheet_name="matriz_ventas",
-                index=False
-            )
+    #         ventas_24m.reset_index().to_excel(
+    #             writer,
+    #             sheet_name="matriz_ventas",
+    #             index=False
+    #         )
 
-            df_eda_final.to_excel(
-                writer,
-                sheet_name="feature_engineering",
-                index=False
-            )
+    #         df_eda_final.to_excel(
+    #             writer,
+    #             sheet_name="feature_engineering",
+    #             index=False
+    #         )
 
-            pd.DataFrame({
-                "variable": VARIABLES_CALCULADAS_EDA,
-                "presente": [
-                    variable in df_eda_final.columns
-                    for variable in VARIABLES_CALCULADAS_EDA
-                ]
-            }).to_excel(
-                writer,
-                sheet_name="validacion_variables",
-                index=False
-            )
+    #         pd.DataFrame({
+    #             "variable": VARIABLES_CALCULADAS_EDA,
+    #             "presente": [
+    #                 variable in df_eda_final.columns
+    #                 for variable in VARIABLES_CALCULADAS_EDA
+    #             ]
+    #         }).to_excel(
+    #             writer,
+    #             sheet_name="validacion_variables",
+    #             index=False
+    #         )
 
-        print(f"Archivo de validación: {ruta_validacion}")
+        # print(f"Archivo de validación: {ruta_validacion}")
 
     print("\nPIPELINE 03 FINALIZADO CORRECTAMENTE")
 

@@ -43,7 +43,7 @@ NOMBRE_ARCHIVO_ENTRADA = "df_OITM_Ventas_after_forecast_filter.xlsx"
 RUTA_INPUT_FORECAST_FILTER = OUTPUT_DIR / NOMBRE_ARCHIVO_ENTRADA
 
 #OUTPUT ENRIQUECIDO CON VARIABLES Y CLASIFICACIONES PARA EDA
-NOMBRE_ARCHIVO_OUTPUT = "df_OITM_Ventas_forecast_eda.xlsx"
+NOMBRE_ARCHIVO_OUTPUT = "03_df_output_ventas_after_EDA_FeatureEng_and_correlation.xlsx"
 
 RUTA_OUTPUT_FORECAST_EDA = OUTPUT_DIR / NOMBRE_ARCHIVO_OUTPUT
 
@@ -213,8 +213,6 @@ VARIABLES_CLUSTER_CANDIDATAS = [
     "cantidad_clientes_24m",
     "meses_con_venta_24m",
     "frecuencia_venta_24m_pct",
-    "venta_promedio_reciente_last_6m",
-    "ratio_venta_reciente_6m",
 
     # Variables calculadas
     "desviacion_std_venta_24m",
@@ -232,7 +230,9 @@ VARIABLES_CLUSTER_CANDIDATAS = [
     "meses_desde_ultima_venta",
     "pendiente_tendencia_24m",
     "correlacion_estacional_12m",
-    "cv_meses_con_venta_24m"
+    "cv_meses_con_venta_24m",
+    "venta_promedio_reciente_last_6m",
+    "ratio_venta_reciente_6m"
 ]
 
 

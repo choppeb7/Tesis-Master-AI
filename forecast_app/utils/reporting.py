@@ -299,7 +299,8 @@ def guardar_grafico_barras_conteo(
     ax.grid(axis="y", alpha=0.3)
 
     plt.tight_layout()
-    plt.savefig(ruta_salida, dpi=500, bbox_inches="tight")
+    
+    plt.savefig(ruta_salida, dpi=300, bbox_inches="tight")
     print(f"Gráfico de barras exportado correctamente ✅ Ruta: {ruta_salida}")
     plt.close()
 
@@ -393,7 +394,7 @@ def guardar_grafico_pastel_conteo(
         )
 
     plt.tight_layout()
-    plt.savefig(ruta_salida, dpi=500, bbox_inches="tight")
+    plt.savefig(ruta_salida, dpi=300, bbox_inches="tight")
     print(f"Gráfico de pastel exportado correctamente ✅ Ruta: {ruta_salida}")
     plt.close()
 # 
