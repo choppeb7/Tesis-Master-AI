@@ -175,4 +175,77 @@ def generar_perfiles_clusters(df_clusterizado, n_variables_destacadas=3):
     # Dividir entre la desviacion estandar GENERAL permite comparar
     # diferencias de variables que tienen unidades muy distintas.
 
+    comparaciones=[]
+
+    for _, fila in df_cluster_estadisticas.iterrows():
+        media_general = float(X_original[variable].mean())
+        mediana_general = float(X_original[variable].median())
+        std_general = float(X_original[variable].std(ddof=0))
+
+        diferencia = float(fila["media"] - media_general)
+        diferencia_estandarizada = (
+            diferencia / std_general if std_general > 0 else np.nan
+        )
+
+        comparaciones.append({
+             nombre_cluster: int(fila[nombre_cluster]),
+            "variable": variable,
+            "media_cluster": float(fila["media"]),
+            "media_general": media_general,
+            "diferencia_medias": diferencia,
+            "diferencia_estandarizada": diferencia_estandarizada,
+            "mediana_cluster": float(fila["mediana"]),
+            "mediana_general": mediana_general,
+        })
+
+        df_cluster_comparativo = pd.DataFrame(comparaciones)
+
+    # E. Resumir las variables que mas distinguen cada cluster.
+    perfiles = []
+
+    for _, fila_tamano in df_cluster_tamanos.iterrows():
+        cluster=fila_tamano["nombre_cluster"]
+
+        comparacion_filtrado_cluster=comparaciones[comparaciones["nombre_cluster"]==cluster]
+        comparacion_filtrado_cluster["magnitud_diferencia"]=comparacion_filtrado_cluster["diferencia_estandarizada"].abs()
+
+        comparacion_filtrado_cluster_top3=comparacion_filtrado_cluster.sort_values(by="magnitud_diferencia", ascending=False).head(n_variables_destacadas)
+
+        nombres=comparacion_filtrado_cluster_top3["variable"].to_list()
+        explicaciones=[]
+
+        for _, fila in comparacion_filtrado_cluster_top3.iterrows():
+            sentido=f" Sobre " if fila["diferencia_medias"] >= 0 else "bajo"
+            explicaciones.append(
+                f"para{fila["variable"]} en el cluster{fila["nombre_cluster"]} se comporta {sentido} la media general con una"
+                f"diferencia  de {fila["diferencia_estandarizada"]} desv. est"
+            )
+
+        perfiles.append({
+            nombre_cluster: cluster,
+            "n_articulos": int(fila_tamano["n_articulos"]),
+            "porcentaje_articulos": float(fila_tamano["porcentaje_articulos"]),
+            "variables_destacadas": ", ".join(nombres),
+            "resumen_diferencias": "; ".join(explicaciones),
+            "descripcion_cluster": "",  # Completar tras la revision del negocio.
+             })
     
+    df_cluster_perfiles = pd.DataFrame(perfiles)
+    
+
+    # F. Conservar TODO el DataFrame consolidado como tabla oficial.
+    df_articulos_clusterizados = df_clusterizado.copy()
+
+    return (
+        df_cluster_tamanos,
+        df_cluster_estadisticas,
+        df_cluster_comparativo,
+        df_cluster_perfiles,
+        df_articulos_clusterizados,
+    )
+
+
+
+          
+
+
