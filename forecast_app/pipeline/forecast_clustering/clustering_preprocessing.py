@@ -124,10 +124,16 @@ def comparar_diagnosticos(df_diagnosticos):
     ]
     return tabla.reset_index()
 
+class PreprocesadorDemanda:
+    """Preprocesador de variables para clustering de demanda.
+
+    Ajusta reglas de winsorización, transformaciones y escalado robusto.
+    Permite aplicar exactamente las mismas reglas a nuevos datos.
+    """
 #==============================================================
 # 2. PREPROCESADOR REUTILIZABLE
 #====================================================
-def __init__(
+    def __init__(
        self,
         aplicar_winsor=cfg.APLICAR_WINSORIZACION,
         factor_iqr=cfg.FACTOR_IQR_WINSOR,
@@ -149,210 +155,211 @@ def __init__(
             else variables_sin_transformacion
         )
 
-def _validar_X(self, X, ajustar):
-    """Valida columnas, tipos y finitud sin imputar ni cambiar X."""
-    if not isinstance(X, pd.DataFrame):
-         raise TypeError("X debe ser un dataframe")
 
-    if X.empty or X.columns.duplicated().any():
-         raise ValueError("X esta vacio o tiene nombres de columnas dulicados")
+    def _validar_X(self, X, ajustar):
+        """Valida columnas, tipos y finitud sin imputar ni cambiar X."""
+        if not isinstance(X, pd.DataFrame):
+            raise TypeError("X debe ser un dataframe")
 
-    if ajustar==False and hasattr(self, "columnas_")==False:
-         raise ValueError("Primero debes ejecutar fit(X)")
+        if X.empty or X.columns.dupliccomoated().any():
+            raise ValueError("X esta vacio o tiene nombres de columnas dulicados")
 
-    if ajustar==False and list(X.columns) != self.columnas_:
-         raise ValueError(
-              "Las columnas y su orden deben coincidir con las usadas en fit()"
-         )
+        if ajustar==False and hasattr(self, "columnas_")==False:
+            raise ValueError("Primero debes ejecutar fit(X)")
 
-    datos=X.apply(pd.to_numeric, errors="raise").astype(float)
-    if not np.isfinite(datos.to_numpy()).all():
-         raise ValueError(" X contienen NaN o infinitos. Revisar datos")
-    return datos
-
-def fit(self, X):
-    """Ajusta winsorizaciones, transformaciones y RobustScaler."""
-    if self.factor_iqr <= 0:
-        raise ValueError("factor_iqr debe ser positivo.")
-
-    original = self._validar_X(X, ajustar=True)
-    if len(original) < 4 or original.shape[1] < 2:
-        raise ValueError("Se requieren al menos 4 artículos y 2 variables.")
-
-    constantes = [
-        nombre for nombre in original.columns
-        if original[nombre].nunique() <= 1
-        ]
-    
-    if constantes:
-        raise ValueError(f"Variables constantes: {constantes}")
-    
-    self.columnas_ = list(original.columns)
-    winsorizado = original.copy()
-    transformado = original.copy()
-    self.reglas_ = {}
-    registros = []
-
-    # ----------------------------------------------------
-    # Regla específica para cada variable
-    # ---------------------------------------------------- 
-    for variable in self.columnas_: 
-        diag= diagnosticar_variable(original[variable])  
-        skew, kurt, iqr= diag["skewness"], diag["kurtosis"], diag["iqr"] 
-
-        sesgo_fuerte=np.isfinite(skew) and abs(skew)> self.umbral_skew_winsor
-        cola_pesada=np.isfinite(kurt) and kurt >= self.umbral_kurtosis_winsor
-        aplicar=bool(self.aplicar_winsor and iqr>0 and (sesgo_fuerte or cola_pesada))
-
-        limite_inf=np.nan
-        limite_sup=np.nan
-        motivo = "no_supera_umbrales"
-        if not self.aplicar_winsor:
-            motivo = "winsorizacion_desactivada"
-        elif iqr<=0:
-            motivo="iqr_cero_no_aplicable"
-        elif aplicar:
-            motivo="sesgo_y_curtosis" if sesgo_fuerte and cola_pesada else (
-                  "sesgo_fuerte" if sesgo_fuerte else "curtosis_elevada"
-                )
-            limite_inf=diag["q1"]- self.factor_iqr*iqr
-            limite_sup=diag["q3"]+ self.factor_iqr*iqr
-            if diag["min"]>=0:
-                limite_inf=max(0.0, limite_inf)
-            winsorizado[variable]=original[variable].clip(
-                lower=limite_inf, upper=limite_sup
+        if ajustar==False and list(X.columns) != self.columnas_:
+            raise ValueError(
+                "Las columnas y su orden deben coincidir con las usadas en fit()"
             )
-        #Diagnostico de la variable despues de winsorizar. 
-        diag_w=diagnosticar_variable(winsorizado[variable])
-        sesgo_w=diag_w["skewness"]
-        kurt_w=diag_w["kurtosis"]
-        sesgo_w_alto=(
-            np.isfinite(sesgo_w) and
-            abs(sesgo_w) >= self.umbral_skew_transform
-        )
-        kurt_w_alta=(
-            np.isfinite(kurt_w)
-            and kurt_w >= self.umbral_kurtosis_transform
-        )
 
-        tipo="sin_transformacion"
-        if variable not in self.variables_sin_transformacion:
-            if diag_w["min"] <0 and (sesgo_w_alto or  kurt_w_alta):
-                tipo="yeo_johnson"
-            elif diag_w["min"]>= 0 and ( 
-                (np.isfinite(sesgo_w) and sesgo_w >= self.umbral_skew_transform)
-                or kurt_w_alta
-            ):
-                tipo="log1p"
+        datos=X.apply(pd.to_numeric, errors="raise").astype(float)
+        if not np.isfinite(datos.to_numpy()).all():
+            raise ValueError(" X contienen NaN o infinitos. Revisar datos")
+        return datos
 
-        pt= None
+    def fit(self, X):
+        """Ajusta winsorizaciones, transformaciones y RobustScaler."""
+        if self.factor_iqr <= 0:
+            raise ValueError("factor_iqr debe ser positivo.")
 
-        if tipo=="log1p":
-            transformado[variable]=np.log1p(winsorizado[variable])
-        elif tipo == "yeo_johnson":
-            pt=PowerTransformer(method="yeo-johnson", standardize=False)
-            transformado[variable]=pt.fit_transform(winsorizado[[variable]]).ravel()
-        else:
-            transformado[variable]=winsorizado[variable]
+        original = self._validar_X(X, ajustar=True)
+        if len(original) < 4 or original.shape[1] < 2:
+            raise ValueError("Se requieren al menos 4 artículos y 2 variables.")
 
-        recortados=int(
-            (original[variable]!= winsorizado[variable]).sum()
-        )
-        self.reglas_[variable]={
-            "winsorizado": aplicar,
-            "limite_inferior": limite_inf,
-            "limite_superior": limite_sup,
-            "transformacion": tipo,
-            "power_transformer": pt,
-        }
-        registros.append({
-            "variable": variable,
-            "winsorizado": aplicar, 
-            "motivo_winsor": motivo, 
-            "limite_inferior": limite_inf,
-            "limite_superior": limite_sup,
-            "valores_recortados": recortados,
-            "porcentaje_recortado": 100 * recortados/ len(original),
-            "transformacion": tipo, 
-            "lambda_yeo_johnson":(
-                    float(pt.lambdas_[0]) if pt is not None else np.nan
-                ),
-        })
+        constantes = [
+            nombre for nombre in original.columns
+            if original[nombre].nunique() <= 1
+            ]
+        
+        if constantes:
+            raise ValueError(f"Variables constantes: {constantes}")
+        
+        self.columnas_ = list(original.columns)
+        winsorizado = original.copy()
+        transformado = original.copy()
+        self.reglas_ = {}
+        registros = []
 
         # ----------------------------------------------------
-        # Escalado común después de tratar todas las variables
-        # ----------------------------------------------------
-        #Escalar matriz post winsorizacion y post transformación
-        self.scaler_ = RobustScaler()
-        matriz_escalada = self.scaler_.fit_transform(transformado)
-        escalado = pd.DataFrame(
-            matriz_escalada, columns=self.columnas_, index=original.index
-        )
-        #Escalar matriz post winsorizacion y post transformación
-        self.registro_ = pd.DataFrame(registros)
+        # Regla específica para cada variable
+        # ---------------------------------------------------- 
+        for variable in self.columnas_: 
+            diag= diagnosticar_variable(original[variable])  
+            skew, kurt, iqr= diag["skewness"], diag["kurtosis"], diag["iqr"] 
 
-        #Parametro de escalado por variable
-        self.parametros_scaler_ = pd.DataFrame({
-            "variable": self.columnas_,
-            "mediana_robust_scaler": self.scaler_.center_,
-            "escala_robust_scaler": self.scaler_.scale_,
-        })
-        #diccionario de matrices original, post_wins, post_transf y post_escalado
-        self.matrices_entrenamiento_ = {
-            "original": original,
-            "post_winsorizacion": winsorizado,
-            "post_transformacion": transformado,
-            "post_escalado": escalado,
-        }
+            sesgo_fuerte=np.isfinite(skew) and abs(skew)> self.umbral_skew_winsor
+            cola_pesada=np.isfinite(kurt) and kurt >= self.umbral_kurtosis_winsor
+            aplicar=bool(self.aplicar_winsor and iqr>0 and (sesgo_fuerte or cola_pesada))
 
-        #iteramos el diagnostico de matrices y concatenamos el resultado el diagnostico por cada matriz considera la iteracion por variable
-        self.diagnosticos_ = pd.concat(
-            [
-                diagnosticar_matriz(self.matrices_entrenamiento_[etapa], etapa)
-                for etapa in ETAPAS
-            ],
-            ignore_index=True,
-        )
-        #Con esto generamos una sola fila por variable para identifica la evolucion de las metricas respecto a las etapas
-        self.comparativo_ = comparar_diagnosticos(self.diagnosticos_)
-
-        #Todos los parametros aprendidos dentro de self han quedado definidos aprendidos
-        return self
-
-def transfrom(self, X):
-    """Replica parámetros aprendidos sin reajustarlos"""
-    datos=self._validar_X(X, ajustar=False)
-    tratados=datos.copy()
-
-    for variable in self.columnas_: 
-        regla= self.reglas_[variable]
-        if regla["winsorizado"]:
-            tratados[variable]=tratados[variable].clip(
-                lower=regla["limite_inferior"],
-                upper=regla["limite_superior"],
-            )
-        if regla["transformacion"]=="log1p":
-            if (tratados[variable]<-1).any():
-                raise ValueError(
-                    f"La variable '{variable}' contiene valores negativos fuera del dominio de log1p"
+            limite_inf=np.nan
+            limite_sup=np.nan
+            motivo = "no_supera_umbrales"
+            if not self.aplicar_winsor:
+                motivo = "winsorizacion_desactivada"
+            elif iqr<=0:
+                motivo="iqr_cero_no_aplicable"
+            elif aplicar:
+                motivo="sesgo_y_curtosis" if sesgo_fuerte and cola_pesada else (
+                    "sesgo_fuerte" if sesgo_fuerte else "curtosis_elevada"
+                    )
+                limite_inf=diag["q1"]- self.factor_iqr*iqr
+                limite_sup=diag["q3"]+ self.factor_iqr*iqr
+                if diag["min"]>=0:
+                    limite_inf=max(0.0, limite_inf)
+                winsorizado[variable]=original[variable].clip(
+                    lower=limite_inf, upper=limite_sup
                 )
-            tratados[variable]=np.log1p(tratados[variable])
-        elif regla["transformacion"]=="yeo_johnson":
-            tratados[variable]=regla["power_transformer"].transform(
-                tratados[[variable]]
-            ).ravel()
-    
-    resultado=self.scaler_.transform(tratados)
-    if not np.isfinite(resultado).all():
-        raise ValueError(" El preprocesamiento produjo valores no finitos")
-    return pd.DataFrame(
-        resultado, columns=self.columnas_, index=X.index
-    )
+            #Diagnostico de la variable despues de winsorizar. 
+            diag_w=diagnosticar_variable(winsorizado[variable])
+            sesgo_w=diag_w["skewness"]
+            kurt_w=diag_w["kurtosis"]
+            sesgo_w_alto=(
+                np.isfinite(sesgo_w) and
+                abs(sesgo_w) >= self.umbral_skew_transform
+            )
+            kurt_w_alta=(
+                np.isfinite(kurt_w)
+                and kurt_w >= self.umbral_kurtosis_transform
+            )
 
-def fit_transform(self, X):
-    """Ajusta y devuelve la matriz escalada sin modificar la original."""
-    self.fit(X)
-    return self.matrices_entrenamiento_["post_escalado"].copy()
+            tipo="sin_transformacion"
+            if variable not in self.variables_sin_transformacion:
+                if diag_w["min"] <0 and (sesgo_w_alto or  kurt_w_alta):
+                    tipo="yeo_johnson"
+                elif diag_w["min"]>= 0 and ( 
+                    (np.isfinite(sesgo_w) and sesgo_w >= self.umbral_skew_transform)
+                    or kurt_w_alta
+                ):
+                    tipo="log1p"
+
+            pt= None
+
+            if tipo=="log1p":
+                transformado[variable]=np.log1p(winsorizado[variable])
+            elif tipo == "yeo_johnson":
+                pt=PowerTransformer(method="yeo-johnson", standardize=False)
+                transformado[variable]=pt.fit_transform(winsorizado[[variable]]).ravel()
+            else:
+                transformado[variable]=winsorizado[variable]
+
+            recortados=int(
+                (original[variable]!= winsorizado[variable]).sum()
+            )
+            self.reglas_[variable]={
+                "winsorizado": aplicar,
+                "limite_inferior": limite_inf,
+                "limite_superior": limite_sup,
+                "transformacion": tipo,
+                "power_transformer": pt,
+            }
+            registros.append({
+                "variable": variable,
+                "winsorizado": aplicar, 
+                "motivo_winsor": motivo, 
+                "limite_inferior": limite_inf,
+                "limite_superior": limite_sup,
+                "valores_recortados": recortados,
+                "porcentaje_recortado": 100 * recortados/ len(original),
+                "transformacion": tipo, 
+                "lambda_yeo_johnson":(
+                        float(pt.lambdas_[0]) if pt is not None else np.nan
+                    ),
+            })
+
+            # ----------------------------------------------------
+            # Escalado común después de tratar todas las variables
+            # ----------------------------------------------------
+            #Escalar matriz post winsorizacion y post transformación
+            self.scaler_ = RobustScaler()
+            matriz_escalada = self.scaler_.fit_transform(transformado)
+            escalado = pd.DataFrame(
+                matriz_escalada, columns=self.columnas_, index=original.index
+            )
+            #Escalar matriz post winsorizacion y post transformación
+            self.registro_ = pd.DataFrame(registros)
+
+            #Parametro de escalado por variable
+            self.parametros_scaler_ = pd.DataFrame({
+                "variable": self.columnas_,
+                "mediana_robust_scaler": self.scaler_.center_,
+                "escala_robust_scaler": self.scaler_.scale_,
+            })
+            #diccionario de matrices original, post_wins, post_transf y post_escalado
+            self.matrices_entrenamiento_ = {
+                "original": original,
+                "post_winsorizacion": winsorizado,
+                "post_transformacion": transformado,
+                "post_escalado": escalado,
+            }
+
+            #iteramos el diagnostico de matrices y concatenamos el resultado el diagnostico por cada matriz considera la iteracion por variable
+            self.diagnosticos_ = pd.concat(
+                [
+                    diagnosticar_matriz(self.matrices_entrenamiento_[etapa], etapa)
+                    for etapa in ETAPAS
+                ],
+                ignore_index=True,
+            )
+            #Con esto generamos una sola fila por variable para identifica la evolucion de las metricas respecto a las etapas
+            self.comparativo_ = comparar_diagnosticos(self.diagnosticos_)
+
+            #Todos los parametros aprendidos dentro de self han quedado definidos aprendidos
+            return self
+
+    def transfrom(self, X):
+        """Replica parámetros aprendidos sin reajustarlos"""
+        datos=self._validar_X(X, ajustar=False)
+        tratados=datos.copy()
+
+        for variable in self.columnas_: 
+            regla= self.reglas_[variable]
+            if regla["winsorizado"]:
+                tratados[variable]=tratados[variable].clip(
+                    lower=regla["limite_inferior"],
+                    upper=regla["limite_superior"],
+                )
+            if regla["transformacion"]=="log1p":
+                if (tratados[variable]<-1).any():
+                    raise ValueError(
+                        f"La variable '{variable}' contiene valores negativos fuera del dominio de log1p"
+                    )
+                tratados[variable]=np.log1p(tratados[variable])
+            elif regla["transformacion"]=="yeo_johnson":
+                tratados[variable]=regla["power_transformer"].transform(
+                    tratados[[variable]]
+                ).ravel()
+        
+        resultado=self.scaler_.transform(tratados)
+        if not np.isfinite(resultado).all():
+            raise ValueError(" El preprocesamiento produjo valores no finitos")
+        return pd.DataFrame(
+            resultado, columns=self.columnas_, index=X.index
+        )
+
+    def fit_transform(self, X):
+        """Ajusta y devuelve la matriz escalada sin modificar la original."""
+        self.fit(X)
+        return self.matrices_entrenamiento_["post_escalado"].copy()
 
 
 

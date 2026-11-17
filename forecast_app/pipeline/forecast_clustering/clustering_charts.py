@@ -19,7 +19,7 @@ Cada funcion devuelve una figura de Matplotlib (fig).
 main_forecast_clustering.py decidira donde y cuando guardarla.
 """
 
-from pathlib import path 
+from pathlib import Path, path 
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -146,4 +146,148 @@ def graficar_distribucion_clusters(df_cluster_tamanos):
     fig.tight_layout()
     return fig
 
-def graficar_heatmap_perfiles(df_)
+def graficar_heatmap_perfiles(df_cluster_comparativo)
+    """Compara las medias de los clusters con la media general, en desv. est.
+    
+        Positivo: media del cluster superior a la media general.
+        Negativo: media del cluster inferior a la media general.
+        No disponible: la desviacion estandar general era cero.
+        """
+    # Filas: variables matematicas. Columnas: clusters.
+    
+    matriz = df_cluster_comparativo.pivot(
+        index="variable",
+        columns=cfg.COLUMNA_CLUSTER,
+        values="diferencia_estandarizada",
+    )
+
+    valores=matriz.to_numpy(dtype=float)
+    validos=valores[np.isinfinte(valores)]
+
+    limite=max(1.0, np.max(np.abs(validos))) if validos.size else 1.0
+
+    fig, ax = plt.subplots(figsize=(max(7, 1.1 * len(matriz.columns) + 3),
+                                     max(5, 0.5 * len(matriz.index) + 2)))
+
+    #Enmascarar celdas que no tiene valor estadistico calculable.
+
+    imagen=ax.imshow(np.ma.masked_invalid(valores), cmpa="rdBu_r",
+                     vmin=-limite, vamx=limite, aspect="auto")
+    ax.set_xticks(range(len(matriz.columns)))
+    ax.set_xticklabels([str(c) for c in matriz.columns])
+    ax.set_yticks(range(len(matriz.index)))
+    ax.set_yticklabels(matriz.index)
+    ax.set_xlabel("Cluster")
+    ax.set_ylabel("Variable matematica")
+    ax.set_title("Perfil de cada cluster frente al inventario completo")
+    
+    # Mostrar los valores de cada celda para facilitar su lectura.
+    for i in range(len(matriz.index)):
+        for j in range(len(matriz.columns)):
+            valor = valores[i, j]
+            texto = f"{valor:+.2f}" if np.isfinite(valor) else "N/D"
+            color = "white" if np.isfinite(valor) and abs(valor) > limite * 0.6 else "black"
+            ax.text(j, i, texto, ha="center", va="center", color=color, fontsize=9)
+
+    fig.colorbar(imagen, ax=ax, label="Diferencia de medias (desv. est. general)")
+    fig.tight_layout()
+    return fig
+
+def graficar_boxplots_variables(df_clusterizado, variables=None):
+    """Compara las variables ORIGINALES entre clusters mediante boxplots.
+
+    variables=None: se muestran todas las variables matematicas disponibles.
+    Para limitar la cantidad de graficos, pasar una lista de variables.
+    Los valores atipicos se ocultan visualmente para facilitar la lectura;
+    NO se eliminan de los datos ni de los calculos estadisticos.
+    """
+
+    columna_cluster = cfg.COLUMNA_CLUSTER
+
+    if variables is None:
+        variables = [
+            columna for columna in df_clusterizado.columns
+            if columna not in [cfg.COLUMNA_ID, columna_cluster]
+        ]
+
+    if not variables:
+        raise ValueError("No hay variables para dibujar boxplots.")
+
+    faltantes = [v for v in variables if v not in df_clusterizado.columns]
+    if faltantes:
+        raise ValueError(f"Variables no encontradas: {faltantes}")
+
+    clusters = sorted(df_clusterizado[columna_cluster].unique())
+    n_columnas = 2
+    n_filas = int(np.ceil(len(variables) / n_columnas))
+    fig, ejes = plt.subplots(n_filas, n_columnas,
+                             figsize=(13, 4 * n_filas), squeeze=False)
+
+    for posicion, variable in enumerate(variables):
+        ax = ejes.flat[posicion]
+
+        # Crear una serie de valores por cada cluster.
+        series = [
+            df_clusterizado.loc[
+                df_clusterizado[columna_cluster] == cluster, variable
+            ].to_numpy(dtype=float)
+            for cluster in clusters
+        ]
+
+        ax.boxplot(series, showfliers=False)
+        ax.set_xticks(range(1, len(clusters) + 1))
+        ax.set_xticklabels([str(c) for c in clusters])
+        ax.set_title(variable)
+        ax.set_xlabel("Cluster")
+        ax.set_ylabel("Valor original")
+        ax.grid(axis="y", alpha=0.25)
+
+    # Si el numero de variables es impar, ocultar el ultimo cuadro vacio.
+    for posicion in range(len(variables), len(ejes.flat)):
+        ejes.flat[posicion].set_visible(False)
+
+    fig.suptitle("Distribucion de variables originales por cluster")
+    fig.tight_layout()
+    return fig
+
+# ============================================================
+# 4. VISUALIZAR LA ESTRUCTURA DE CLUSTERS MEDIANTE PCA
+# ============================================================
+
+def graficar_pca_clusters(X_scaled, etiquetas):
+    """Reduce la dimensionalidad de los datos a 2D y dibuja los clusters."""
+
+    if X_scaled.shape[0] != len(etiquetas):
+        raise ValueError(
+            "El numero de filas de X_scaled no coincide con el numero de etiquetas."
+        )
+
+    pca = PCA(n_components=3)
+    X_pca = pca.fit_transform(X_scaled)
+
+    fig, ax = plt.subplots(figsize=(8, 6), subplot_kw=dict(projection="3d"))
+    scatter = ax.scatter(X_pca[:, 0], X_pca[:, 1], X_pca[:, 2], c=etiquetas, cmap="tab10", alpha=0.7)
+    legend1 = ax.legend(*scatter.legend_elements(), title="Clusters")
+    ax.add_artist(legend1)
+    ax.set_title("Visualizacion PCA de clusters")
+    ax.set_xlabel("Componente principal 1")
+    ax.set_ylabel("Componente principal 2")
+    ax.set_zlabel("Componente principal 3")
+    ax.grid(alpha=0.25)
+    fig.tight_layout()
+    return fig
+
+# ============================================================
+# 5. GUARDADO DE FIGURAS (USADO POR EL ORQUESTADOR)
+# ============================================================
+
+def guardar_figura(figura, nombre_archivo, carpeta=cfg.FIGURES_DIR):
+    """Guarda la figura PNG y cierra el objeto para liberar memoria.
+
+    El orquestador decide cuando llamar esta funcion.
+    Devuelve la ruta del archivo generado.
+    """
+
+    carpeta = Path(carpeta)
+    carpeta.mkdir(parents=True, exist_ok=True)
+    ruta = carpeta / nombre_archivo
