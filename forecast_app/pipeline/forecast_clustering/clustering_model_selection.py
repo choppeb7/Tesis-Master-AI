@@ -206,7 +206,7 @@ def seleccionar_k_optimo(
     if df_metricas["k"].duplicated().any() or tolerancia < 0:
         raise ValueError("Existen valores de k repetidos o una tolerancia negativa.")
 
-    tabla = df_metricas.sort_values("k").reset_index(drop=True).copy()
+    tabla = df_metricas.sort_values("k", ascending=True).reset_index(drop=True).copy()
     k_codo = detectar_codo(tabla)
 
     # A. Identificar los k que consideramos faciles de interpretar.

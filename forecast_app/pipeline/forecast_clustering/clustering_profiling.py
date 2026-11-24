@@ -101,10 +101,10 @@ def generar_perfiles_clusters(df_clusterizado, n_variables_destacadas=3):
     if df_clusterizado.columns.duplicated().any():
         raise ValueError("df_clusterizado tiene columnas duplicadas.")
 
-    nombre_cluster = cfg.COLUMNA_CLUSTER
+    cluster = cfg.COLUMNA_CLUSTER
     columna_id = cfg.COLUMNA_ID
 
-    if columna_id not in df_clusterizado.columns or nombre_cluster not in df_clusterizado.columns:
+    if columna_id not in df_clusterizado.columns or cluster not in df_clusterizado.columns:
         raise ValueError("Falta el codigo del articulo o la columna del cluster.")
 
     # Identificador unico: necesario para exportar y cruzar luego con df_eda.
@@ -115,7 +115,7 @@ def generar_perfiles_clusters(df_clusterizado, n_variables_destacadas=3):
         # Separar los nombres de las variables; ninguna cantidad esta fijada.
     variables = [
         columna for columna in df_clusterizado.columns
-        if columna not in [columna_id, nombre_cluster]
+        if columna not in [columna_id, cluster]
     ]
     if not variables:
         raise ValueError("No se encontraron variables matematicas para analizar.")
@@ -129,7 +129,7 @@ def generar_perfiles_clusters(df_clusterizado, n_variables_destacadas=3):
     if not np.isfinite(X_original.to_numpy()).all():
         raise ValueError("Hay valores nulos o infinitos en las variables matematicas.")
 
-    etiquetas = df_clusterizado[nombre_cluster]
+    etiquetas = df_clusterizado[cluster]
     if etiquetas.isna().any() or len(etiquetas.unique()) < 2:
         raise ValueError("Se requieren al menos dos clusters validos.")
 
@@ -137,11 +137,11 @@ def generar_perfiles_clusters(df_clusterizado, n_variables_destacadas=3):
 
     # Copia de trabajo: variables originales + identificador del cluster.
     datos = X_original.copy()
-    datos[nombre_cluster] = etiquetas.to_numpy()
+    datos[cluster] = etiquetas.to_numpy()
 
     # B. Cantidad y porcentaje de articulos por cluster.
     df_cluster_tamanos = (
-        datos.groupby(nombre_cluster)
+        datos.groupby(cluster)
         .size()
         .reset_index(name="n_articulos")
     )
@@ -151,12 +151,12 @@ def generar_perfiles_clusters(df_clusterizado, n_variables_destacadas=3):
      # C. Estadisticas descriptivas por cluster y variable original.
     registros = []
 
-    for cluster, grupo in datos.groupby(nombre_cluster):
+    for cluster, grupo in datos.groupby(cluster):
         for variable in variables:
             valores = grupo[variable]
 
             registros.append({
-                nombre_cluster: int(cluster),
+                "nombre_cluster": int(cluster),
                 "variable": variable,
                 "n_articulos": len(valores),
                 "media": float(valores.mean()),
@@ -178,6 +178,7 @@ def generar_perfiles_clusters(df_clusterizado, n_variables_destacadas=3):
     comparaciones=[]
 
     for _, fila in df_cluster_estadisticas.iterrows():
+        variable = fila["variable"] 
         media_general = float(X_original[variable].mean())
         mediana_general = float(X_original[variable].median())
         std_general = float(X_original[variable].std(ddof=0))
@@ -188,7 +189,7 @@ def generar_perfiles_clusters(df_clusterizado, n_variables_destacadas=3):
         )
 
         comparaciones.append({
-             nombre_cluster: int(fila[nombre_cluster]),
+            "nombre_cluster": int(fila["nombre_cluster"]),
             "variable": variable,
             "media_cluster": float(fila["media"]),
             "media_general": media_general,
@@ -204,25 +205,29 @@ def generar_perfiles_clusters(df_clusterizado, n_variables_destacadas=3):
     perfiles = []
 
     for _, fila_tamano in df_cluster_tamanos.iterrows():
-        cluster=fila_tamano["nombre_cluster"]
+        cluster = fila_tamano["cluster"]
 
-        comparacion_filtrado_cluster=comparaciones[comparaciones["nombre_cluster"]==cluster]
-        comparacion_filtrado_cluster["magnitud_diferencia"]=comparacion_filtrado_cluster["diferencia_estandarizada"].abs()
+        top_variables = (
+            df_cluster_comparativo
+            .loc[lambda df: df["nombre_cluster"] == cluster]
+            .assign(
+                magnitud_diferencia=lambda df: df["diferencia_estandarizada"].abs()
+            )
+            .nlargest(n_variables_destacadas, "magnitud_diferencia")
+        )
 
-        comparacion_filtrado_cluster_top3=comparacion_filtrado_cluster.sort_values(by="magnitud_diferencia", ascending=False).head(n_variables_destacadas)
+        nombres = top_variables["variable"].tolist()
+        explicaciones = []
 
-        nombres=comparacion_filtrado_cluster_top3["variable"].to_list()
-        explicaciones=[]
-
-        for _, fila in comparacion_filtrado_cluster_top3.iterrows():
+        for _, fila in top_variables.iterrows():
             sentido=f" Sobre " if fila["diferencia_medias"] >= 0 else "bajo"
             explicaciones.append(
-                f"para{fila["variable"]} en el cluster{fila["nombre_cluster"]} se comporta {sentido} la media general con una"
-                f"diferencia  de {fila["diferencia_estandarizada"]} desv. est"
+                f"para{fila['variable']} en el cluster{fila['nombre_cluster']} se comporta {sentido} la media general con una"
+                f"diferencia  de {fila['diferencia_estandarizada']} desv. est"
             )
 
         perfiles.append({
-            nombre_cluster: cluster,
+            "nombre_cluster": cluster,
             "n_articulos": int(fila_tamano["n_articulos"]),
             "porcentaje_articulos": float(fila_tamano["porcentaje_articulos"]),
             "variables_destacadas": ", ".join(nombres),

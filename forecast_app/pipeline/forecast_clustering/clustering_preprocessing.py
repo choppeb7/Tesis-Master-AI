@@ -108,15 +108,24 @@ def diagnosticar_matriz(X, etapa):
     ])
 
 def comparar_diagnosticos(df_diagnosticos):
-
-    metricas=[
+    """Compara las principales métricas entre las etapas de preprocesamiento."""
+    metricas = [
         "skewness", "kurtosis", "media", "mediana", "std",
-                "min", "max", "q1", "q3", "iqr", "p95", "p99",
-        ]
-    tabla=df_diagnosticos.pivot(
+        "min", "max", "q1", "q3", "iqr", "p95", "p99",
+    ]
+
+    requeridas = {"variable", "etapa"} | set(metricas)
+    faltantes = requeridas.difference(df_diagnosticos.columns)
+    if faltantes:
+        raise ValueError(
+            "Faltan columnas requeridas para comparar diagnósticos: "
+            f"{sorted(faltantes)}"
+        )
+
+    tabla = df_diagnosticos.pivot(
         index="variable",
         columns="etapa",
-        values="metricas"
+        values=metricas
     )
     tabla.columns=[
         f"{metrica}_{etapa}"
@@ -141,7 +150,7 @@ class PreprocesadorDemanda:
         umbral_kurtosis_winsor=cfg.UMBRAL_KURTOSIS_WINSOR,
         umbral_skew_transform=cfg.UMBRAL_SKEW_TRANSFORMACION,
         umbral_kurtosis_transform=cfg.UMBRAL_KURTOSIS_TRANSFORMACION,
-        variables_sin_transformacion=None,
+        variables_sin_transformacion=cfg.VARIABLES_SIN_TRANSFORMACION,
     ):
         self.aplicar_winsor = aplicar_winsor
         self.factor_iqr = factor_iqr
@@ -149,19 +158,16 @@ class PreprocesadorDemanda:
         self.umbral_kurtosis_winsor = umbral_kurtosis_winsor
         self.umbral_skew_transform = umbral_skew_transform
         self.umbral_kurtosis_transform = umbral_kurtosis_transform
-        self.variables_sin_transformacion = list(
-            cfg.VARIABLES_SIN_TRANSFORMACION
-            if variables_sin_transformacion is None
-            else variables_sin_transformacion
-        )
-
+        self.variables_sin_transformacion = set(
+    variables_sin_transformacion or []
+)
 
     def _validar_X(self, X, ajustar):
         """Valida columnas, tipos y finitud sin imputar ni cambiar X."""
         if not isinstance(X, pd.DataFrame):
             raise TypeError("X debe ser un dataframe")
 
-        if X.empty or X.columns.dupliccomoated().any():
+        if X.empty or X.columns.duplicated().any():
             raise ValueError("X esta vacio o tiene nombres de columnas dulicados")
 
         if ajustar==False and hasattr(self, "columnas_")==False:
@@ -244,13 +250,16 @@ class PreprocesadorDemanda:
 
             tipo="sin_transformacion"
             if variable not in self.variables_sin_transformacion:
+
                 if diag_w["min"] <0 and (sesgo_w_alto or  kurt_w_alta):
                     tipo="yeo_johnson"
+
                 elif diag_w["min"]>= 0 and ( 
                     (np.isfinite(sesgo_w) and sesgo_w >= self.umbral_skew_transform)
                     or kurt_w_alta
                 ):
                     tipo="log1p"
+                
 
             pt= None
 
@@ -274,8 +283,8 @@ class PreprocesadorDemanda:
             }
             registros.append({
                 "variable": variable,
-                "winsorizado": aplicar, 
-                "motivo_winsor": motivo, 
+                "winsorizado": aplicar,
+                "motivo_winsor": motivo,
                 "limite_inferior": limite_inf,
                 "limite_superior": limite_sup,
                 "valores_recortados": recortados,
@@ -326,7 +335,7 @@ class PreprocesadorDemanda:
             #Todos los parametros aprendidos dentro de self han quedado definidos aprendidos
             return self
 
-    def transfrom(self, X):
+    def transform(self, X):
         """Replica parámetros aprendidos sin reajustarlos"""
         datos=self._validar_X(X, ajustar=False)
         tratados=datos.copy()
@@ -339,7 +348,7 @@ class PreprocesadorDemanda:
                     upper=regla["limite_superior"],
                 )
             if regla["transformacion"]=="log1p":
-                if (tratados[variable]<-1).any():
+                if (tratados[variable]<0).any():
                     raise ValueError(
                         f"La variable '{variable}' contiene valores negativos fuera del dominio de log1p"
                     )

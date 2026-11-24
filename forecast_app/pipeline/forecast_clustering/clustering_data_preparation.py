@@ -92,7 +92,7 @@ def preparar_matriz_numerica(df_input, variables, columna_id):
     # 3. Validar valores infinitos
     # --------------------------------------------------------
 
-    valores_no_finitos=~np.isinfinite(
+    valores_no_finitos=~np.isfinite(
         X.to_numpy(dtype=float)
     )
 

@@ -43,11 +43,11 @@ def main():
     print("\nRESUMEN FINAL")
     print("-" * 60)
 
-    print(f"K óptimo: {resultados['k_optimo']}")
-    print(f"Criterio: {resultados['criterio']}")
-    print(f"Dataset: {resultados['ruta_dataset']}")
-    print(f"Modelo: {resultados['ruta_modelo']}")
-    print(f"Metadata: {resultados['ruta_metadata']}")
+# """     print(f"K óptimo: {resultados['k_optimo']}")
+#     print(f"Criterio: {resultados['criterio']}")
+#     print(f"Dataset: {resultados['ruta_dataset']}")
+#     print(f"Modelo: {resultados['ruta_modelo']}")
+#     print(f"Metadata: {resultados['ruta_metadata']}") """
 
     print("\nPipeline 04 finalizado correctamente.")
 

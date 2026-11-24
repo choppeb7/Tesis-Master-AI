@@ -83,6 +83,7 @@ PATRONES_COLUMNAS_VENTA_MENSUAL = [
 
 COLUMNAS_IDENTIFICADORAS = [
     "codigo_articulo",
+
     "descripcion_completa",
     "grupo_articulo",
     "categoria",
@@ -117,6 +118,8 @@ COLUMNAS_CONTEXTO_EDA = [
     "grupo_articulo",
     "categoria",
     "subcategoria",
+    "unidad_medida_inventario",
+    
     # "tipo_abastecimiento",
     # "criticidad_comercial",
     # "segmento_forecast",

@@ -19,14 +19,14 @@ Cada funcion devuelve una figura de Matplotlib (fig).
 main_forecast_clustering.py decidira donde y cuando guardarla.
 """
 
-from pathlib import Path, path 
+from pathlib import Path 
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from sklearn.decomposition import PCA
 
-from . import clustering_confi as cfg
+from . import clustering_config as cfg
 
 # ============================================================
 # 1. GRAFICAS PARA ELEGIR EL NUMERO DE CLUSTERS (K)
@@ -47,10 +47,10 @@ def graficar_codo(df_metricas, k_optimo, k_codo=None):
     ax.set_xticks(tabla["k"])
     ax.grid(alpha=0.25)
     ax.legend()
-    fig.tighout_layout()
+    fig.tight_layout()
     return fig
 
-def _graficar_metrica(df_metricas, columna, titulo, etiqueta_y, k_optimo)
+def _graficar_metrica(df_metricas, columna, titulo, etiqueta_y, k_optimo):
 
     tabla=df_metricas.sort_values(by="k")
     x=tabla["k"]
@@ -66,13 +66,13 @@ def _graficar_metrica(df_metricas, columna, titulo, etiqueta_y, k_optimo)
     ax.set_xticks(tabla["k"])
     ax.grid(alpha=0.25)
     ax.legend()
-    fig.tighout_layout()
+    fig.tight_layout()
     return fig
 
 def graficar_silhouette(df_metricas, k_optimo):
     """Silhouette alto indica, en general, grupos mejor separados."""
     return _graficar_metrica(df_metricas, "silhouette_score", 
-                             "Silhouette Score vs. K Silhouette (mayor es mejor)",
+                             "Silhouette Score vs. K Silhouette (mayor es mejor)", "silhouette_score",
                              k_optimo
                              )
 
@@ -80,7 +80,7 @@ def graficar_davies_bouldin(df_metricas, k_optimo):
     """Davies-Bouldin bajo indica, en general, grupos mas compactos."""
     return _graficar_metrica(
         df_metricas, "davies_bouldin_score", "Davies-Bouldin vs. K",
-        "Davies-Bouldin (menor es mejor)", k_optimo,
+        "Davies-Bouldin (menor es mejor)", k_optimo
     )
 
 def graficar_calinski_harabasz(df_metricas, k_optimo):
@@ -102,7 +102,7 @@ def graficar_estabilidad_ari(df_detalle_ari):
     # Convertir cada pareja de semillas en un texto para el eje X.
     etiquetas_parejas=(df_detalle_ari["semilla_a"].astype(str)+ "-"
                       + df_detalle_ari["semilla_b"].astype(str))
-    fig, ax=plt.subplot(figsize=(max(9, len(df_detalle_ari)*0.75),5 ))
+    fig, ax=plt.subplots(figsize=(max(9, len(df_detalle_ari)*0.75),5 ))
     ax.bar(etiquetas_parejas, df_detalle_ari["ari"])
     ax.axhline(df_detalle_ari["ari"].mean(), color="tab:orange",
                linestyle="--", label="ARI promedio")
@@ -146,7 +146,7 @@ def graficar_distribucion_clusters(df_cluster_tamanos):
     fig.tight_layout()
     return fig
 
-def graficar_heatmap_perfiles(df_cluster_comparativo)
+def graficar_heatmap_perfiles(df_cluster_comparativo):
     """Compara las medias de los clusters con la media general, en desv. est.
     
         Positivo: media del cluster superior a la media general.
@@ -154,25 +154,27 @@ def graficar_heatmap_perfiles(df_cluster_comparativo)
         No disponible: la desviacion estandar general era cero.
         """
     # Filas: variables matematicas. Columnas: clusters.
-    
+    print(df_cluster_comparativo.columns.tolist())
+    print(df_cluster_comparativo.shape)
+    print(df_cluster_comparativo.head())
     matriz = df_cluster_comparativo.pivot(
         index="variable",
-        columns=cfg.COLUMNA_CLUSTER,
-        values="diferencia_estandarizada",
+        columns="nombre_cluster",
+        values="diferencia_estandarizada"
     )
 
     valores=matriz.to_numpy(dtype=float)
-    validos=valores[np.isinfinte(valores)]
+    
 
-    limite=max(1.0, np.max(np.abs(validos))) if validos.size else 1.0
+    limite=max(1.0, np.max(np.abs(valores))) if valores.size else 1.0
 
     fig, ax = plt.subplots(figsize=(max(7, 1.1 * len(matriz.columns) + 3),
                                      max(5, 0.5 * len(matriz.index) + 2)))
 
     #Enmascarar celdas que no tiene valor estadistico calculable.
 
-    imagen=ax.imshow(np.ma.masked_invalid(valores), cmpa="rdBu_r",
-                     vmin=-limite, vamx=limite, aspect="auto")
+    imagen=ax.imshow(np.ma.masked_invalid(valores), cmap="RdBu_r",
+                     vmin=-limite, vmax=limite, aspect="auto")
     ax.set_xticks(range(len(matriz.columns)))
     ax.set_xticklabels([str(c) for c in matriz.columns])
     ax.set_yticks(range(len(matriz.index)))
@@ -290,4 +292,12 @@ def guardar_figura(figura, nombre_archivo, carpeta=cfg.FIGURES_DIR):
 
     carpeta = Path(carpeta)
     carpeta.mkdir(parents=True, exist_ok=True)
-    ruta = carpeta / nombre_archivo
+    ruta_archivo= carpeta / nombre_archivo
+    figura.savefig(
+            ruta_archivo,
+            dpi=cfg.DPI_FIGURAS,
+            bbox_inches="tight",
+            facecolor="white"
+        )
+
+    print(f"Figura guardada correctamente: {ruta_archivo}")
