@@ -56,7 +56,7 @@ ruta_excel_output_default = (
 # forecast_app/pipeline/main_pipeline.py
 # ============================================================
 
-from pipeline.main_pipeline import ejecutar_pipeline_forecast
+from pipeline.forecast_inferencia.main_pipeline import ejecutar_pipeline_forecast
 
 
 # ============================================================

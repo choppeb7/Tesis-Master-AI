@@ -1,25 +1,39 @@
+from pathlib import Path
+import pandas as pd
+import sys
+# ============================================================
+# AJUSTE DE RUTA PARA IMPORTAR forecast_app
+# ============================================================
+
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+FORECAST_APP_DIR = PROJECT_ROOT / "forecast_app"
+
+if str(FORECAST_APP_DIR) not in sys.path:
+    sys.path.insert(0, str(FORECAST_APP_DIR))
+
 # ============================================================
 # Script principal de pipeline forecast
 # ============================================================
 
-from pipeline.data_loader import cargar_matriz_ventas
-from pipeline.preprocessing import preparar_formato_forecast_y_metadata
-from pipeline.train_test_split import separar_train_test_df_inferencia
-from pipeline.evaluation_dataset import generar_df_eval_long
-from pipeline.metrics import evaluando_metricas_por_articulo_modelo
-from pipeline.model_selection import mejor_modelo_por_articulo
-from pipeline.visualization_data import construir_df_forecast_visualizacion
-from pipeline.export_results import (agregar_forecast_todos_los_articulos, exportar_dataframe_excel)
+from pipeline.forecast_inferencia import forecast_config as cfg
+from pipeline.forecast_inferencia.data_loader import cargar_matriz_ventas
+from pipeline.forecast_inferencia.preprocessing import preparar_formato_forecast_y_metadata
+from pipeline.forecast_inferencia.train_test_split import separar_train_test_df_inferencia
+from pipeline.forecast_inferencia.evaluation_dataset import generar_df_eval_long
+from pipeline.forecast_inferencia.metrics import evaluando_metricas_por_articulo_modelo
+from pipeline.forecast_inferencia.model_selection import mejor_modelo_por_articulo
+from pipeline.forecast_inferencia.visualization_data import construir_df_forecast_visualizacion
+from pipeline.forecast_inferencia.export_results import (agregar_forecast_todos_los_articulos, exportar_dataframe_excel)
 from pathlib import Path
 
 def ejecutar_pipeline_forecast(
-    ruta_excel,
-    meses_evaluacion=6,
-    meses_forecast_futuro=6,
-    ventana_dummy=24,
-    redondeo_evaluacion=None,
-    redondeo_operativo="ceil",
-    ruta_exportacion=None):
+    ruta_excel=cfg.INPUT_ARCHIVO_EXCEL,
+    meses_evaluacion=cfg.MESES_EVALUACION,
+    meses_forecast_futuro=cfg.MESES_FORECAST_FUTURO,
+    ventana_dummy=cfg.VENTANA_DUMMY,
+    redondeo_evaluacion=cfg.REDONDEO_EVALUACION,
+    redondeo_operativo=cfg.REDONDEO_OPERATIVO,
+    ruta_exportacion=cfg.RUTA_EXPORTACION):
     # ------------------------------------------------------------
     # 1. Cargar dataframe original
     # ------------------------------------------------------------

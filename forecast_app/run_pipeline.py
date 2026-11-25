@@ -5,7 +5,7 @@
 from pathlib import Path
 import argparse
 
-from pipeline.main_pipeline import ejecutar_pipeline_forecast
+from pipeline.forecast_inferencia.main_pipeline import ejecutar_pipeline_forecast
 
 
 def convertir_none(valor):

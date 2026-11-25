@@ -152,6 +152,74 @@ def _guardar_graficas(nombre_grupo, rutas, df_metricas, k_optimo, k_codo, df_det
 
     return rutas_figuras
 
+# ============================================================
+# 2. FUNCIONES AUXILIARES DE EXPORTACION PARA CONSOLIDACION DE RESULTADOS (GRUPOS)
+# ============================================================
+
+def consolidar_resultados_clustering(resultados):
+    """Consolida clusters y genera identificadores globales únicos."""
+
+    dataframes = []
+    siguiente_cluster_global = 0
+
+    for nombre_grupo, resultado in resultados.items():
+
+        df_grupo = resultado["df_final"].copy()
+
+        # Identificar procedencia del artículo
+        df_grupo["grupo_unidad"] = nombre_grupo
+
+        # Conservar etiqueta original de cada K-Means
+        df_grupo["cluster_local"] = (
+            df_grupo[cfg.COLUMNA_CLUSTER].astype(int)
+        )
+
+        # Recuperar clusters locales existentes
+        clusters_locales = sorted(
+            df_grupo["cluster_local"].unique()
+        )
+
+        # Asignar identificadores globales consecutivos
+        mapa_clusters = {
+            cluster: siguiente_cluster_global + i
+            for i, cluster in enumerate(clusters_locales)
+        }
+
+        df_grupo["cluster_global"] = (
+            df_grupo["cluster_local"].map(mapa_clusters)
+        )
+
+        # Identificador descriptivo por grupo y cluster
+        prefijo = {
+            "unidades": "UN",
+            "dimensionales": "DIM",
+        }[nombre_grupo]
+
+        df_grupo["segmento_cluster"] = (
+            prefijo
+            + "_"
+            + df_grupo["cluster_local"].astype(str)
+        )
+
+        dataframes.append(df_grupo)
+
+        # Preparar numeración para el siguiente grupo
+        siguiente_cluster_global += len(clusters_locales)
+
+    df_consolidado = pd.concat(
+        dataframes,
+        ignore_index=True,
+    )
+
+    # Validar unicidad de artículos
+    if df_consolidado[cfg.COLUMNA_ID].duplicated().any():
+        raise ValueError(
+            "Existen códigos de artículo duplicados."
+        )
+
+    return df_consolidado
+
+
 
 def ejecutar_clustering_grupo(nombre_grupo, df_input, df_eda, X, variables):
     prefijo = f"[{nombre_grupo}]"
@@ -333,13 +401,52 @@ def ejecutar_pipeline_clustering():
 
     resultados={}
 
+    # EJECUTAR CLUSTERING POR GRUPO
     for nombre_grupo, datos in grupos.items():
+
         print(f"\nProcesando grupo: {nombre_grupo}")
 
-        resultados[nombre_grupo] =ejecutar_clustering_grupo(nombre_grupo=nombre_grupo, **datos)
-    print("\n========== PIPELINE 04 COMPLETADO EN TODOS LOS GRUPOS ==========")
+        resultados[nombre_grupo] = ejecutar_clustering_grupo(
+            nombre_grupo=nombre_grupo,
+            **datos,
+        )
 
-    for grupo, resultado in resultados.items():
-        print(f"[{grupo}] K={resultado['k_optimo']} | Dataset={resultado['ruta_dataset']} | "
-              f"Figuras={len(resultado['rutas_figuras'])} | Tablas={len(resultado['rutas_tablas'])}")
-    return resultados
+    # ETAPA FINAL - CONSOLIDACION
+    print("\nConsolidando resultados de clustering...")
+
+    df_consolidado =consolidar_resultados_clustering(
+        resultados
+    )
+
+    # Validar cantidad total de artículos
+    if len(df_consolidado) != len(df_input):
+        raise ValueError(
+            "La cantidad de artículos consolidada no coincide "
+            "con la cantidad original."
+        )
+
+    # Generar el Excel consolidado
+    ruta_consolidado = (
+        Path(cfg.RUTA_OUTPUT_CLUSTERIZADO).parent
+        / "pipeline04_clusters_consolidados.xlsx"
+    )
+
+    ruta_consolidado.parent.mkdir(
+        parents=True,
+        exist_ok=True
+    )
+
+    df_consolidado.to_excel(
+        ruta_consolidado,
+        index=False,
+    )
+
+    print("\n========== PIPELINE 04 FINALIZADO ==========")
+    print(f"Artículos procesados: {len(df_consolidado)}")
+    print(f"Archivo consolidado: {ruta_consolidado}")
+
+    return {
+        "resultados_grupos": resultados,
+        "df_final": df_consolidado,
+        "ruta_dataset": ruta_consolidado,
+    }

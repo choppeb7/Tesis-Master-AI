@@ -4,7 +4,7 @@
 # ============================================================
 import pandas as pd
 import numpy as np
-from pipeline.forecast import predecir_best_model_por_articulo
+from pipeline.forecast_inferencia.forecast import predecir_best_model_por_articulo
 
 def construir_df_forecast_visualizacion(
     df_inferencia,
