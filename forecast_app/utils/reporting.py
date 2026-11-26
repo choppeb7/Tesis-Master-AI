@@ -224,7 +224,7 @@ def guardar_grafico_barras_conteo(
     color_barras="#4C78A8",
     figsize=(10, 6),
     rotacion_xticks=45,
-    fontsize_etiqueta=10
+    fontsize_etiqueta=10,
 ):
     """
     Guarda un gráfico de barras con el conteo de una columna categórica.

@@ -17,11 +17,16 @@ import streamlit as st
 
 # PROJECT_ROOT apunta a:
 # Tesis-Master-AI/
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 # FORECAST_APP_DIR apunta a:
 # Tesis-Master-AI/forecast_app/
 FORECAST_APP_DIR = PROJECT_ROOT / "forecast_app"
+
+DATA_DIR = FORECAST_APP_DIR / "data"
+INPUT_DIR = DATA_DIR / "input"
+OUTPUT_DIR = DATA_DIR / "output"
+
 
 # Agregar forecast_app al path para poder importar pipeline
 if str(FORECAST_APP_DIR) not in sys.path:
@@ -34,18 +39,14 @@ from datetime import datetime
 
 fecha_hoy = datetime.today().strftime("%Y-%m-%d")
 
-ruta_excel_default = (
-    FORECAST_APP_DIR
-    / "data"
-    / "input"
-    / "df_matriz_ventas_articulos_forecast.xlsx"
+ruta_excel_ventas_clusterizadas = (OUTPUT_DIR
+    / "pipeline04_clusters_consolidados.xlsx"
 )
 
-ruta_excel_output_default = (
-    FORECAST_APP_DIR
-    / "data"
-    / "output"
-    / f"df_matriz_ventas_articulos_con_forecast_{fecha_hoy}.xlsx"
+
+ruta_excel_output_inferencia_forecast= (
+    OUTPUT_DIR
+    / "pipeline05_resultados_forecast_inferencia.xlsx"
 )
 
 
@@ -78,13 +79,13 @@ st.title("📊 Prueba local - Modelo AI basado en Statsforecast para reabastecim
 # ============================================================
 
 @st.cache_data(show_spinner=True, show_time=True, ttl=3600)
-def correr_pipeline_cacheado(ruta_excel, meses_evaluacion, meses_forecast_futuro, ventana_dummy, ruta_exportacion):
+def correr_pipeline_cacheado(ruta_excel_ventas_clusterizadas, meses_evaluacion, meses_forecast_futuro, ventana_dummy, ruta_excel_output_inferencia_forecast):
     return ejecutar_pipeline_forecast(
-        ruta_excel=ruta_excel,
+        ruta_excel=ruta_excel_ventas_clusterizadas,
         meses_evaluacion=meses_evaluacion,
         meses_forecast_futuro=meses_forecast_futuro,
         ventana_dummy=ventana_dummy,
-        ruta_exportacion=ruta_exportacion
+        ruta_exportacion=ruta_excel_output_inferencia_forecast
     )
 
 
@@ -96,18 +97,18 @@ def main():
     # Esto permite guardar los resultados del pipeline después de presionar
     # el botón. Si no lo haces, los resultados podrían perderse en cada rerun.
     # ------------------------------------------------------------
-    if ruta_excel_default is None:
+    if ruta_excel_ventas_clusterizadas is None:
         st.error("No se encontró el archivo Excel de entrada. Por favor, verifica la ruta.")
         st.stop()
     else:
-        st.session_state["ruta_excel_default"] = ruta_excel_default
+        st.session_state["ruta_excel_default"] = ruta_excel_ventas_clusterizadas
         st.success("Archivo Excel de entrada encontrado.")
 
-    if ruta_excel_output_default is None:
+    if ruta_excel_output_inferencia_forecast is None:
             st.error("No se encontró la ruta de salida del archivo Excel a calcular Por favor, verifica la ruta.")
             st.stop()
     else:
-        st.session_state["ruta_excel_output_default"] = ruta_excel_output_default
+        st.session_state["ruta_excel_output_default"] = ruta_excel_output_inferencia_forecast
         st.success("Archivo Excel de salida encontrado.")
 
     if "resultados_pipeline" not in st.session_state:
@@ -130,11 +131,11 @@ def main():
             #ruta_excel="./Datos/df_matriz_ventas_articulos_forecast.xlsx"
             st.write(f"Ejecutando pipeline con los siguientes parámetros:\n- Ruta Excel: {st.session_state['ruta_excel_default']}\n- Meses evaluación: {meses_evaluacion}\n- Meses forecast futuro: {meses_forecast_futuro}\n- Ventana dummy: {ventana_dummy}")
             resultados_pipeline = correr_pipeline_cacheado(
-                ruta_excel=st.session_state["ruta_excel_default"],
+                ruta_excel_ventas_clusterizadas=st.session_state["ruta_excel_default"],
                 meses_evaluacion=meses_evaluacion,
                 meses_forecast_futuro=meses_forecast_futuro,
                 ventana_dummy=ventana_dummy,
-                ruta_exportacion=st.session_state["ruta_excel_output_default"]
+                ruta_excel_output_inferencia_forecast=st.session_state["ruta_excel_output_default"]
             )
             st.session_state["resultados_pipeline"] = resultados_pipeline
             st.session_state["pipeline_ejecutado"] = True

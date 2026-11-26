@@ -149,18 +149,15 @@ def agregar_forecast_todos_los_articulos(
         )
     )
 
-    df_forecast_wide = df_forecast_wide[
-        [columna_id_forecast] + columnas_forecast
-    ]
 
     # ------------------------------------------------------------
     # Compra sugerida = suma total del forecast futuro
     # ------------------------------------------------------------
+    df_forecast_wide = df_forecast_wide[
+        [columna_id_forecast] + columnas_forecast
+    ]
 
-    df_forecast_wide["compra_sugerida"] = (
-        df_forecast_wide[columnas_forecast]
-        .sum(axis=1)
-    )
+    df_forecast_wide["demanda_proyectada"] = df_forecast_wide[columnas_forecast].sum(axis=1)
 
     # ------------------------------------------------------------
     # Merge contra todos los artículos del dataframe original
@@ -184,18 +181,17 @@ def agregar_forecast_todos_los_articulos(
     # Rellenar artículos sin forecast con cero
     # ------------------------------------------------------------
 
-    columnas_nuevas = columnas_forecast + ["compra_sugerida"]
-
-    df_resultado[columnas_nuevas] = (
-        df_resultado[columnas_nuevas]
-        .fillna(0)
+    necesidad_neta = (
+        df_resultado["demanda_proyectada"]
+        - df_resultado["stock_disponible_proyectado"]
     )
 
-    if redondeo in ["ceil", "round"]:
-        df_resultado[columnas_nuevas] = (
-            df_resultado[columnas_nuevas]
-            .astype(int)
-        )
+    df_resultado["compra_sugerida"] = (
+        np.ceil(necesidad_neta.clip(lower=0))
+        .where(df_resultado["demanda_proyectada"].notna(), 0)
+        .astype(int)
+    )
+    df_resultado["demanda_proyectada"] = df_resultado["demanda_proyectada"].fillna(0)
 
     return df_resultado, df_forecast_wide, columnas_forecast
 

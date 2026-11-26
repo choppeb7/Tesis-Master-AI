@@ -24,6 +24,7 @@ from pipeline.forecast_inferencia.metrics import evaluando_metricas_por_articulo
 from pipeline.forecast_inferencia.model_selection import mejor_modelo_por_articulo
 from pipeline.forecast_inferencia.visualization_data import construir_df_forecast_visualizacion
 from pipeline.forecast_inferencia.export_results import (agregar_forecast_todos_los_articulos, exportar_dataframe_excel)
+from pipeline.forecast_inferencia.forecast_charts import guardar_graficos_forecast
 from pathlib import Path
 
 def ejecutar_pipeline_forecast(
@@ -172,7 +173,6 @@ def ejecutar_pipeline_forecast(
                 nombre_hoja="resultado_forecast",
                 index=False
             )
-
 
         return {
             "df_original": df,

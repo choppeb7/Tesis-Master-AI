@@ -11,6 +11,8 @@ from pathlib import Path
 import sys
 import traceback
 
+
+
 # Permite importar `pipeline` aun ejecutando este archivo dentro de scripts/.
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
@@ -18,7 +20,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from forecast_app.pipeline.forecast_inferencia import forecast_config as cfg
 from forecast_app.pipeline.forecast_inferencia.main_pipeline import ejecutar_pipeline_forecast
-
+from pipeline.forecast_inferencia.forecast_charts import guardar_graficos_forecast
 
 def main():
     """Ejecuta el pipeline con los valores definidos en forecast_config.py."""
@@ -41,6 +43,7 @@ def main():
 
     # El orquestador utiliza sus valores por defecto, leídos desde cfg.
     resultados = ejecutar_pipeline_forecast()
+    guardar_graficos_forecast(resultados)
 
     print("\n" + "=" * 70)
     print("PIPELINE 05 | FINALIZADO")
