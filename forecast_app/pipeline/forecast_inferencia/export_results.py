@@ -4,6 +4,8 @@ import numpy as np
 from pathlib import Path
 import pandas as pd
 
+from .forecast_config import TABLES_DIR
+
 # ============================================================
 # Agregar forecast futuro a todos los artículos
 # ============================================================
@@ -219,3 +221,22 @@ def exportar_dataframe_excel(
         )
 
     return ruta_exportacion
+
+def exportar_tablas_forecast(resultados):
+    
+    tablas_forecast = {
+            "df_metricas": "01_metricas_por_articulo_y_modelo.xlsx",
+            "df_best_model": "02_modelo_ganador_por_articulo.xlsx",
+            "df_eval_wide": "03_evaluacion_mensual_por_modelo.xlsx",
+            "df_forecast_wide": "04_forecast_futuro_por_articulo.xlsx",
+            "df_resultado_final": "05_resultado_final_y_compra_sugerida.xlsx",
+            "df_dummy_por_categoria_wape": "06_resumen_dummy_por_categoria_wape.xlsx"
+        }
+    
+    for clave, nombre_archivo in tablas_forecast.items():
+            ruta = exportar_dataframe_excel(
+                df_exportar=resultados[clave],
+                ruta_exportacion=TABLES_DIR / nombre_archivo,
+                nombre_hoja=clave,
+            )
+            print(f"Tabla guardada: {ruta}")

@@ -16,6 +16,7 @@ TABLES_DIR = REPORTS_DIR / "tables" / "05_forecast_inferencia"
 
 import pipeline.forecast_inferencia.forecast_config as cfg
 
+
 from utils.reporting import (
     guardar_grafico_barras_conteo,
     guardar_grafico_histograma,
@@ -71,39 +72,19 @@ def guardar_graficos_forecast(resultados):
             nombre_archivo="03_distribucion_wape_ranking.png",
         )
 #==============================================================
-#4.GENERAMOS ETIQUETAS PARA LA DISTRIBUCIÓN DE WAPE_RANKING DEL MODELO GANADOR POR ARTICULO
+#4.GENERAMOS DISTRIBUCION CATEGORICA DE WAPE_RANKING DEL MODELO GANADOR POR ARTICULO
 #==============================================================
     
-    rangos_wape=[0,25,50,100,150, np.inf]
-    etiquetas_wape=[
-        "0-25% | muy bueno",
-        "25-50% | bueno",
-        "50-100% | regular",
-        "100-150% | malo",
-        "150%+ | muy malo"
-    ]
-
-    
-    categorias_wape = pd.cut(
-        wape.where(np.isfinite(wape)),
-        bins=rangos_wape,
-        labels=etiquetas_wape,
-        include_lowest=True,
-    ).astype("string")
-
-    categorias_wape = categorias_wape.mask(np.isinf(wape), "Infinito")
-    df_wape_segmentado = df_best_model.assign(
-        WAPE_categoria=categorias_wape.fillna("Sin dato")
-    )
-
     guardar_grafico_barras_conteo(
-        df=df_wape_segmentado,
+        df=df_best_model,
         columna="WAPE_categoria",
         directorio_salida=FIGURES_DIR,
         titulo="Modelos ganadores por rango de WAPE_ranking",
         nombre_archivo="04_wape_ranking_por_categoria.png",
     )
-    
+#==============================================================
+#5.GENERAMOS DISTRIBUCION DEL SESGO ABSOLUTO DE LOS MODELOS GANADORES
+#==============================================================
     guardar_grafico_histograma(
         df=df_best_model,
         columna="bias_total_abs_periodo_evaluacion",
@@ -113,7 +94,11 @@ def guardar_graficos_forecast(resultados):
     )
 
     guardar_modelos_ganadores_por_cluster(resultados)
+    guardar_dummy_por_categoria_wape(resultados["df_dummy_por_categoria_wape"])
 
+#==============================================================
+#6.GENERAMOS DISTRIBUCION DE MODELOS GANADORES POR CLUSTER GLOBAL
+#==============================================================
 def guardar_modelos_ganadores_por_cluster(resultados):
     df_modelos = resultados["df_best_model"][["unique_id", "best_model"]]
     df_clusters = resultados["df_resultado_final"][
@@ -192,6 +177,41 @@ def guardar_modelos_ganadores_por_cluster(resultados):
         fig.savefig(
             FIGURES_DIR / "06_modelos_ganadores_por_cluster_global.png",
             dpi=300,
+            bbox_inches="tight",
+        )
+    finally:
+        plt.close(fig)
+
+#==============================================================
+#6.GENERAMOS participacion de modelo dummy por categoria de WAPE
+#==============================================================
+def guardar_dummy_por_categoria_wape(resumen):
+    if resumen.empty:
+        return
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    try:
+        barras = ax.bar(resumen["WAPE_categoria"], resumen["pct_dummy"])
+        etiquetas = [
+            f"{pct:.1f} % ({victorias}/{total})"
+            for pct, victorias, total in zip(
+                resumen["pct_dummy"],
+                resumen["victorias_dummy"],
+                resumen["articulos"],
+            )
+        ]
+        ax.bar_label(barras, labels=etiquetas, padding=3)
+        ax.set_title("Tasa de victoria del modelo dummy por categoría de WAPE")
+        ax.set_xlabel("Categoría de WAPE_ranking")
+        ax.set_ylabel("Artículos donde ganó el dummy (%)")
+        ax.set_yticks(range(0, 101, 20))
+        ax.set_ylim(0, 110)
+        ax.tick_params(axis="x", labelrotation=25)
+
+        FIGURES_DIR.mkdir(parents=True, exist_ok=True)
+        fig.savefig(
+            FIGURES_DIR / "07_dummy_por_categoria_wape.png",
+            dpi=200,
             bbox_inches="tight",
         )
     finally:

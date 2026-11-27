@@ -20,7 +20,10 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from forecast_app.pipeline.forecast_inferencia import forecast_config as cfg
 from forecast_app.pipeline.forecast_inferencia.main_pipeline import ejecutar_pipeline_forecast
-from pipeline.forecast_inferencia.forecast_charts import guardar_graficos_forecast
+from pipeline.forecast_inferencia.forecast_charts import TABLES_DIR, guardar_graficos_forecast
+from pipeline.forecast_inferencia.export_results import exportar_dataframe_excel
+
+
 
 def main():
     """Ejecuta el pipeline con los valores definidos en forecast_config.py."""
@@ -42,8 +45,8 @@ def main():
         )
 
     # El orquestador utiliza sus valores por defecto, leídos desde cfg.
-    resultados = ejecutar_pipeline_forecast()
-    guardar_graficos_forecast(resultados)
+    resultados = ejecutar_pipeline_forecast(generar_reportes=True)
+
 
     print("\n" + "=" * 70)
     print("PIPELINE 05 | FINALIZADO")

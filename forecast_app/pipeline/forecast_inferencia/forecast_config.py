@@ -18,6 +18,10 @@ DATA_DIR = FORECAST_APP_DIR / "data"
 INPUT_DIR = DATA_DIR / "input"
 OUTPUT_DIR = DATA_DIR / "output"
 
+REPORTS_DIR = FORECAST_APP_DIR / "reports"
+FIGURES_DIR = REPORTS_DIR / "figures" / "05_forecast_inferencia"
+TABLES_DIR = REPORTS_DIR / "tables" / "05_forecast_inferencia"
+
 PROJECT_DIR = Path(__file__).resolve().parent
 
 INPUT_ARCHIVO_EXCEL = (

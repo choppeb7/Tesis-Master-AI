@@ -1,6 +1,7 @@
 from pathlib import Path
 import pandas as pd
 import sys
+import numpy as np
 # ============================================================
 # AJUSTE DE RUTA PARA IMPORTAR forecast_app
 # ============================================================
@@ -23,8 +24,9 @@ from pipeline.forecast_inferencia.evaluation_dataset import generar_df_eval_long
 from pipeline.forecast_inferencia.metrics import evaluando_metricas_por_articulo_modelo
 from pipeline.forecast_inferencia.model_selection import mejor_modelo_por_articulo
 from pipeline.forecast_inferencia.visualization_data import construir_df_forecast_visualizacion
-from pipeline.forecast_inferencia.export_results import (agregar_forecast_todos_los_articulos, exportar_dataframe_excel)
+from pipeline.forecast_inferencia.export_results import agregar_forecast_todos_los_articulos, exportar_dataframe_excel, exportar_tablas_forecast
 from pipeline.forecast_inferencia.forecast_charts import guardar_graficos_forecast
+from pipeline.forecast_inferencia.forecast_analysis import resumir_dummy_por_categoria_wape
 from pathlib import Path
 
 def ejecutar_pipeline_forecast(
@@ -34,7 +36,8 @@ def ejecutar_pipeline_forecast(
     ventana_dummy=cfg.VENTANA_DUMMY,
     redondeo_evaluacion=cfg.REDONDEO_EVALUACION,
     redondeo_operativo=cfg.REDONDEO_OPERATIVO,
-    ruta_exportacion=cfg.RUTA_EXPORTACION):
+    ruta_exportacion=cfg.RUTA_EXPORTACION,
+    generar_reportes=True):
     # ------------------------------------------------------------
     # 1. Cargar dataframe original
     # ------------------------------------------------------------
@@ -104,6 +107,27 @@ def ejecutar_pipeline_forecast(
         df_best_model = mejor_modelo_por_articulo(
             df_metricas
         )
+         
+        wape = pd.to_numeric(
+            df_best_model["WAPE_ranking"], errors="coerce"
+        ).astype("float64")
+
+        categorias_wape = pd.cut(
+            wape.where(np.isfinite(wape)),
+            bins=[0, 25, 50, 100, 150, np.inf],
+            labels=[
+                "0-25% | muy bueno",
+                "25-50% | bueno",
+                "50-100% | regular",
+                "100-150% | malo",
+                "150%+ | muy malo",
+            ],
+            include_lowest=True,
+        ).astype("string")
+
+        df_best_model["WAPE_categoria"] = (
+            categorias_wape.mask(np.isinf(wape), "Infinito").fillna("Sin dato")
+        )
 
         # ------------------------------------------------------------
         # 7. Enriquecer metadata con mejor modelo
@@ -146,9 +170,18 @@ def ejecutar_pipeline_forecast(
         # ------------------------------------------------------------
         # 9. Agregar forecast futuro y compra sugerida al df original
         # ------------------------------------------------------------
+        df_base_resultado = df.merge(
+            df_best_model[["unique_id", "best_model", "WAPE_ranking",  "WAPE_categoria"]].rename(
+                columns={"unique_id": "codigo_articulo"}
+            ),
+            on="codigo_articulo",
+            how="left",
+            validate="one_to_one",
+        )
+
 
         df_resultado_final, df_forecast_wide, columnas_forecast = agregar_forecast_todos_los_articulos(
-            df=df,
+            df=df_base_resultado,
             df_forecast=df_forecast_visual,
             columna_codigo_df="codigo_articulo",
             columna_id_forecast="unique_id",
@@ -174,7 +207,7 @@ def ejecutar_pipeline_forecast(
                 index=False
             )
 
-        return {
+        resultados= {
             "df_original": df,
             "df_inferencia": df_inferencia,
             "df_train": df_train,
@@ -193,5 +226,15 @@ def ejecutar_pipeline_forecast(
             "mapa_fechas": mapa_fechas,
             "columnas_venta": columnas_venta,
             "info_split": info_visual,
-            "ruta_archivo_exportado": ruta_archivo_exportado
+            "ruta_archivo_exportado": ruta_archivo_exportado,
+            "df_dummy_por_categoria_wape": resumir_dummy_por_categoria_wape(
+                df_best_model
+            )
         }
+        if generar_reportes:
+            exportar_tablas_forecast(resultados)
+            guardar_graficos_forecast(resultados)
+
+            return resultados
+        
+
